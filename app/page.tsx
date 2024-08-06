@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -23,6 +23,7 @@ type MetricValue = {
 };
 
 type CalculatedMetrics = {
+  option: OptionData;
   expiryDate: MetricValue;
   strike: MetricValue;
   markPrice: MetricValue;
@@ -42,12 +43,24 @@ type CalculatedMetrics = {
   theoreticalPriceAtTarget: MetricValue;
   hedgeCoverageReturn: MetricValue;
   hedgeEfficiencyScore: MetricValue;
+  hedgeEfficiency: MetricValue;
+  hedgeEfficiencyPerDay: MetricValue;
+  exchange: 'Deribit' | 'Bybit';
+  // Spreads
+  longStrike?: MetricValue;
+  shortStrike?: MetricValue;
+  spreadWidth?: MetricValue;
+  maxProfit?: MetricValue;
+  maxLoss?: MetricValue;
+  breakEvenPrice?: MetricValue;
 };
 
 type Column = {
   key: keyof CalculatedMetrics;
   label: string;
 };
+
+type OptionType = 'put' | 'spread';
 
 const columns: Column[] = [
   { key: 'expiryDate', label: 'Expiry' },
@@ -69,13 +82,22 @@ const columns: Column[] = [
   { key: 'gamma', label: 'Gamma' },
   { key: 'vega', label: 'Vega' },
   { key: 'theta', label: 'Theta' },
-
+  // Hedge effective rate
   { key: 'hedgeEfficiency', label: 'Hedge Efficiency' },
   { key: 'hedgeEfficiencyPerDay', label: 'Hedge Efficiency Per Day' },
   { key: 'hedgeEfficiencyScore', label: 'Hedge Efficiency Score' },
+  // Spreads
+  { key: 'longStrike', label: 'Long Strike' },
+  { key: 'shortStrike', label: 'Short Strike' },
+  { key: 'spreadWidth', label: 'Spread Width' },
+  { key: 'maxProfit', label: 'Max Profit' },
+  { key: 'maxLoss', label: 'Max Loss' },
+  { key: 'breakEvenPrice', label: 'Break Even Price' },
 ];
 
 const OptionsDashboard: React.FC = () => {
+  const [currency, setCurrency] = useState('BTC');
+  const [optionType, setOptionType] = useState<OptionType>('put');
   const [optionsData, setOptionsData] = useState<OptionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,12 +106,12 @@ const OptionsDashboard: React.FC = () => {
   const [btcPrice, setBtcPrice] = useState(0);
   const [investmentAmount, setInvestmentAmount] = useState(4000);
   const [targetPrice, setTargetPrice] = useState(0);
-  const [ivIncrease, setIvIncrease] = useState(200); // 20% IV increase by default
+  const [ivIncrease, setIvIncrease] = useState(100); // 20% IV increase by default
 
   useEffect(() => {
     const fetchDeribitData = async () => {
       try {
-        const response = await fetch('https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=BTC&kind=option');
+        const response = await fetch(`https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=${currency}&kind=option`);
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
@@ -110,7 +132,7 @@ const OptionsDashboard: React.FC = () => {
 
     const fetchBybitData = async () => {
       try {
-        const response = await fetch('https://api.bybit.com/v5/market/tickers?category=option&baseCoin=BTC');
+        const response = await fetch(`https://api.bybit.com/v5/market/tickers?category=option&baseCoin=${currency}`);
         if (!response.ok) {
           throw new Error('Network response was not ok');
         }
@@ -122,12 +144,12 @@ const OptionsDashboard: React.FC = () => {
               instrument_name: option.symbol,
               underlying_price: parseFloat(option.underlyingPrice),
               // mark_price: parseFloat(option.markPrice),
-              mark_price: parseFloat(option.markPrice) / parseFloat(option.underlyingPrice), // Convert to BTC
-              bid_price: parseFloat(option.bid1Price) / parseFloat(option.underlyingPrice), // Convert to BTC
-              ask_price: parseFloat(option.ask1Price) / parseFloat(option.underlyingPrice), // Convert to BTC
+              mark_price: parseFloat(option.markPrice) / parseFloat(option.underlyingPrice), // Convert to BTC/ETH/ETC
+              bid_price: parseFloat(option.bid1Price) / parseFloat(option.underlyingPrice), // Convert to BTC/ETH/ETC
+              ask_price: parseFloat(option.ask1Price) / parseFloat(option.underlyingPrice), // Convert to BTC/ETH/ETC
               // mark_iv: parseFloat(option.markIv),
               mark_iv: parseFloat(option.markIv) * 100,
-              underlying_index: 'BTC',
+              underlying_index: currency,
               creation_timestamp: Date.now(),
               open_interest: parseFloat(option.openInterest),
               exchange: 'Bybit' as const
@@ -150,8 +172,8 @@ const OptionsDashboard: React.FC = () => {
 
         setOptionsData(allOptions);
         if (allOptions.length > 0) {
-          setBtcPrice(allOptions[0].underlying_price);
-          setTargetPrice(allOptions[0].underlying_price * 0.4);
+          setBtcPrice(allOptions[allOptions.length - 1].underlying_price);
+          setTargetPrice(allOptions[allOptions.length - 1].underlying_price * 0.4);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -161,9 +183,9 @@ const OptionsDashboard: React.FC = () => {
     };
 
     fetchAllData();
-  }, []);
+  }, [currency]);
 
-  const calculateMetrics = (option: OptionData): CalculatedMetrics | null => {
+  const calculateMetrics = useMemo(() => (option: OptionData): CalculatedMetrics | null => {
     const [, expiryDate, strikeStr] = option.instrument_name.split('-');
     const strike = parseFloat(strikeStr);
 
@@ -208,6 +230,7 @@ const OptionsDashboard: React.FC = () => {
     const totalCost = contracts * contractCost;
 
     if (contracts <= 0) {
+      // console.error('Invalid number of contracts:', contracts, 'Investment amount:', investmentAmount, 'Contract cost:', contractCost);
       return null;
     }
 
@@ -222,6 +245,9 @@ const OptionsDashboard: React.FC = () => {
     const hedgeEfficiencyScore = (hedgeCoverageReturn / totalCost) * (durationInDays / minimumDuration);
 
     return {
+      option: {
+        ...option,
+      },
       expiryDate: { display: expiryDate, raw: expiryTimestamp },
       strike: { display: `$${strike.toLocaleString()}`, raw: strike },
       optionPrice: { display: optionPrice.toFixed(4), raw: optionPrice },
@@ -245,7 +271,8 @@ const OptionsDashboard: React.FC = () => {
       exchange: option.exchange,
       hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
     };
-  };
+  }, [investmentAmount, targetPrice, ivIncrease]);
+
 
   const cumulativeNormalDistribution = (x: number): number => {
     const a1 = 0.254829592;
@@ -267,10 +294,167 @@ const OptionsDashboard: React.FC = () => {
     return K * Math.exp(-r * T) * cumulativeNormalDistribution(-d2) - S * cumulativeNormalDistribution(-d1);
   };
 
+  const calculateDelta = (S, K, T, r, sigma, optionType) => {
+    const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
+    return optionType === 'call'
+      ? cumulativeNormalDistribution(d1)
+      : cumulativeNormalDistribution(d1) - 1;
+  };
+
+  const calculateGamma = (S, K, T, r, sigma) => {
+    const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
+    return Math.exp(-Math.pow(d1, 2) / 2) / (S * sigma * Math.sqrt(2 * Math.PI * T));
+  };
+
+  const calculateVega = (S, K, T, r, sigma) => {
+    const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
+    return S * Math.sqrt(T) * Math.exp(-Math.pow(d1, 2) / 2) / Math.sqrt(2 * Math.PI);
+  };
+
+  const calculateTheta = (S, K, T, r, sigma, optionType) => {
+    const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
+    const d2 = d1 - sigma * Math.sqrt(T);
+    const term1 = -S * sigma * Math.exp(-Math.pow(d1, 2) / 2) / (2 * Math.sqrt(T));
+    const term2 = r * K * Math.exp(-r * T);
+    return optionType === 'call'
+      ? (term1 - term2 * cumulativeNormalDistribution(d2)) / 365
+      : (term1 + term2 * cumulativeNormalDistribution(-d2)) / 365;
+  };
+
+  const calculateSpreadMetrics = useMemo(() => (longOption: OptionData, shortOption: OptionData): CalculatedMetrics | null => {
+    const [, longExpiryDate] = longOption.instrument_name.split('-');
+    const [, shortExpiryDate] = shortOption.instrument_name.split('-');
+    if (longExpiryDate !== shortExpiryDate) {
+      return null;
+    }
+
+    const longStrike = parseFloat(longOption.instrument_name.split('-')[2]);
+    const shortStrike = parseFloat(shortOption.instrument_name.split('-')[2]);
+
+    if (isNaN(shortStrike) || isNaN(longStrike) || shortStrike <= longStrike) {
+      return null;
+    }
+
+    // Calculate the spread's prices using the API data
+    const spreadBid = Math.max(0, shortOption.bid_price - longOption.ask_price);
+    const spreadAsk = shortOption.ask_price - longOption.bid_price;
+    const netPremium = (spreadBid + spreadAsk) / 2;
+
+    if (netPremium <= 0) {
+      return null;
+    }
+
+    const spreadWidth = shortStrike - longStrike;
+    const underlyingPrice = (longOption.underlying_price + shortOption.underlying_price) / 2;
+
+    const contractCost = netPremium * underlyingPrice;
+    const contracts = Math.floor(investmentAmount / contractCost);
+
+    if (contracts <= 0) {
+      // console.error('Invalid number of contracts:', contracts, 'Investment amount:', investmentAmount, 'Contract cost:', contractCost);
+      return null;
+    }
+
+    const totalCost = contracts * contractCost;
+
+    const expiryTimestamp = new Date(longExpiryDate).getTime();
+    const now = Date.now();
+    const daysToExpiration = Math.max(0, Math.ceil((expiryTimestamp - now) / (1000 * 60 * 60 * 24)));
+
+    // Calculate theoretical price at target
+    // const theoreticalPriceAtTarget = targetPrice >= shortStrike ? 0 : targetPrice > longStrike ? shortStrike - targetPrice : shortStrike - longStrike;
+    
+    // Calculate Greeks (using average IV for simplicity)
+    // const T = daysToExpiration / 365;
+    // const r = 0.01; // risk-free rate (assumed)
+    // const S = underlyingPrice;
+
+    const T = daysToExpiration / 365;
+    const r = 0.01; // risk-free rate (assumed)
+    const S = underlyingPrice;
+    
+    const sigmaLong = longOption.mark_iv / 100;
+    const sigmaShort = shortOption.mark_iv / 100;
+    
+    // Increase IV for target price calculation
+    const increasedSigmaLong = sigmaLong * (1 + ivIncrease / 100);
+    const increasedSigmaShort = sigmaShort * (1 + ivIncrease / 100);
+  
+    // Calculate theoretical price at target using Black-Scholes
+    const longPutPriceAtTarget = blackScholesPut(targetPrice, longStrike, T / 2, r, increasedSigmaLong);
+    const shortPutPriceAtTarget = blackScholesPut(targetPrice, shortStrike, T / 2, r, increasedSigmaShort);
+    const theoreticalPriceAtTarget = shortPutPriceAtTarget - longPutPriceAtTarget;
+
+    const longDelta = calculateDelta(S, longStrike, T, r, sigmaLong, 'put');
+    const shortDelta = calculateDelta(S, shortStrike, T, r, sigmaShort, 'put');
+    const spreadDelta = longDelta - shortDelta;
+
+    const longGamma = calculateGamma(S, longStrike, T, r, sigmaLong);
+    const shortGamma = calculateGamma(S, shortStrike, T, r, sigmaShort);
+    const spreadGamma = longGamma - shortGamma;
+
+    const longVega = calculateVega(S, longStrike, T, r, sigmaLong);
+    const shortVega = calculateVega(S, shortStrike, T, r, sigmaShort);
+    const spreadVega = longVega - shortVega;
+
+    const longTheta = calculateTheta(S, longStrike, T, r, sigmaLong, 'put');
+    const shortTheta = calculateTheta(S, shortStrike, T, r, sigmaShort, 'put');
+    const spreadTheta = longTheta - shortTheta;
+
+    // Calculate hedge coverage return
+    const hedgeCoverageReturn = contracts * theoreticalPriceAtTarget;
+
+    // Calculate hedge efficiency metrics
+    const hedgeEfficiency = hedgeCoverageReturn / totalCost;
+    const hedgeEfficiencyPerDay = hedgeEfficiency / daysToExpiration;
+
+    const minimumDuration = 30;
+    const durationInDays = Math.min(daysToExpiration, minimumDuration);
+    const hedgeEfficiencyScore = (hedgeCoverageReturn / totalCost) * (durationInDays / minimumDuration);
+
+    // Calculate max profit, max loss, and break-even price
+    const maxProfit = spreadWidth - netPremium;
+    const maxLoss = netPremium;
+    const breakEvenPrice = shortStrike - netPremium;
+
+    return {
+      longOption,
+      shortOption,
+      expiryDate: { display: longExpiryDate, raw: expiryTimestamp },
+      strike: { display: `$${shortStrike.toLocaleString()} - $${longStrike.toLocaleString()}`, raw: [shortStrike, longStrike] },
+      markPrice: { display: netPremium.toFixed(4), raw: netPremium },
+      bidPrice: { display: spreadBid.toFixed(4), raw: spreadBid },
+      askPrice: { display: spreadAsk.toFixed(4), raw: spreadAsk },
+      optionPrice: { display: netPremium.toFixed(4), raw: netPremium },
+      contractCost: { display: `$${contractCost.toFixed(2)}`, raw: contractCost },
+      contracts: { display: contracts.toFixed(2), raw: contracts },
+      totalCost: { display: `$${totalCost.toFixed(2)}`, raw: totalCost },
+      theoreticalPrice: { display: `$${netPremium.toFixed(4)}`, raw: netPremium },
+      theoreticalPriceAtTarget: { display: `$${theoreticalPriceAtTarget.toFixed(4)}`, raw: theoreticalPriceAtTarget },
+      hedgeCoverageReturn: { display: `$${hedgeCoverageReturn.toFixed(2)}`, raw: hedgeCoverageReturn },
+      daysToExpiration: { display: daysToExpiration.toString(), raw: daysToExpiration },
+      impliedVolatility: { display: `${((longOption.mark_iv + shortOption.mark_iv) / 2).toFixed(2)}%`, raw: (longOption.mark_iv + shortOption.mark_iv) / 2 },
+      delta: { display: spreadDelta.toFixed(4), raw: spreadDelta },
+      gamma: { display: spreadGamma.toFixed(6), raw: spreadGamma },
+      vega: { display: spreadVega.toFixed(4), raw: spreadVega },
+      theta: { display: spreadTheta.toFixed(4), raw: spreadTheta },
+      hedgeEfficiency: { display: hedgeEfficiency.toFixed(2), raw: hedgeEfficiency },
+      hedgeEfficiencyPerDay: { display: hedgeEfficiencyPerDay.toFixed(4), raw: hedgeEfficiencyPerDay },
+      hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
+      maxProfit: { display: `$${maxProfit.toFixed(2)}`, raw: maxProfit },
+      maxLoss: { display: `$${maxLoss.toFixed(2)}`, raw: maxLoss },
+      breakEvenPrice: { display: `$${breakEvenPrice.toFixed(2)}`, raw: breakEvenPrice },
+      exchange: longOption.exchange,
+      longStrike: { display: `$${longStrike.toLocaleString()}`, raw: longStrike },
+      shortStrike: { display: `$${shortStrike.toLocaleString()}`, raw: shortStrike },
+      spreadWidth: { display: `$${spreadWidth.toFixed(2)}`, raw: spreadWidth },
+    };
+  }, [investmentAmount, targetPrice, calculateDelta, calculateGamma, calculateVega, calculateTheta]);
+
   const getOptionDaysToExpiry = (o) => {
     const [, expiryDateStr] = o.instrument_name.split('-');
     let expiryDate;
-  
+
     if (/^[0-9]{1,2}[A-Z]{3}[0-9]{2}$/.test(expiryDateStr)) {
       // Deribit format: DMMMYY or DDMMMYY (e.g., 2AUG24 or 27SEP24)
       const day = expiryDateStr.slice(0, expiryDateStr.length - 5);
@@ -287,26 +471,61 @@ const OptionsDashboard: React.FC = () => {
       console.error('Unexpected date format:', o.instrument_name);
       return 0;
     }
-  
+
     const now = new Date();
     const diffTime = expiryDate.getTime() - now.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return Math.max(0, diffDays);
-  }  
+  }
 
-  // const consistentUnderlyingPrice = optionsData[0]?.underlying_price || 0;
-  const sortedData = [...optionsData]
-    // .filter(o => o.ask_price && o.bid_price && getOptionDaysToExpiry(o) > 15 && o.instrument_name.includes('-P'))
-    .filter(o => {
-      const isValid = o.ask_price && o.bid_price && getOptionDaysToExpiry(o) > 50;
-      if (!isValid) {
-        console.log('Filtered out option:', o,  getOptionDaysToExpiry(o));  // Log filtered out options
-      }
+  const filterValidOptions = useMemo(() => (options: OptionData[]): OptionData[] => {
+    return options.filter(o => {
+      const isValid = o.ask_price && o.bid_price && getOptionDaysToExpiry(o) > 7;
       return isValid;
-    })
-    .map(o => calculateMetrics(o))
-    .filter(Boolean)
-    .sort((a, b) => {
+    });
+  }, []);
+
+  const generateOptionsData = useMemo(() => (options: OptionData[]): CalculatedMetrics[] => {
+    if (optionType === 'put') {
+      return options.map(option => calculateMetrics(option)).filter(Boolean);
+    } else {
+      const spreads: CalculatedMetrics[] = [];
+      // Group options by expiration date
+      const optionsByExpiry = options.reduce((acc, option) => {
+        const [, expiryDate] = option.instrument_name.split('-');
+        if (!acc[expiryDate]) {
+          acc[expiryDate] = [];
+        }
+        acc[expiryDate].push(option);
+        return acc;
+      }, {});
+
+      // Generate spreads for each expiration date
+      Object.values(optionsByExpiry).forEach((sameExpiryOptions: OptionData[]) => {
+        for (let i = 0; i < sameExpiryOptions.length; i++) {
+          for (let j = i + 1; j < sameExpiryOptions.length; j++) {
+            const option1 = sameExpiryOptions[i];
+            const option2 = sameExpiryOptions[j];
+            const strike1 = parseFloat(option1.instrument_name.split('-')[2]);
+            const strike2 = parseFloat(option2.instrument_name.split('-')[2]);
+
+            if (strike1 > strike2) {
+              const spreadMetrics = calculateSpreadMetrics(option2, option1); // Long (lower strike), Short (higher strike)
+              if (spreadMetrics) {
+                spreads.push(spreadMetrics);
+              }
+            }
+          }
+        }
+      });
+      return spreads;
+    }
+  }, [optionType, calculateMetrics, calculateSpreadMetrics]);
+
+  const processOptionsData = useMemo(() => {
+    const validOptions = filterValidOptions(optionsData);
+    const generatedData = generateOptionsData(validOptions);
+    return generatedData.filter(Boolean).sort((a, b) => {
       const aValue = a[sortColumn].raw;
       const bValue = b[sortColumn].raw;
 
@@ -326,30 +545,61 @@ const OptionsDashboard: React.FC = () => {
 
       return 0;
     });
+  }, [optionsData, filterValidOptions, generateOptionsData, sortColumn, sortDirection]);
+
+  const sortedData = processOptionsData;
 
   const handleSort = (column: keyof CalculatedMetrics) => {
     setSortColumn(column);
     setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
   };
 
+  const chartData = useMemo(() => sortedData.map(item => ({
+    x: item.daysToExpiration.raw,
+    y: item.hedgeEfficiencyScore.raw,
+    z: item.totalCost.raw,
+    name: optionType === 'put'
+      ? `${item.expiryDate.display} - $${item.strike.raw}`
+      : `${item.expiryDate.display} - $${item.strike.display}`,
+  })), [sortedData, optionType]);
+
   if (loading) return <div className="text-center py-10">Loading...</div>;
   if (error) return <div className="text-center py-10 text-red-500">Error: {error}</div>;
 
-  const chartData = sortedData.map(option => ({
-    x: option.daysToExpiration.raw,
-    // y: option.hedgeEfficiency.raw,
-    y: option.hedgeEfficiencyScore.raw, 
-    z: option.totalCost.raw,
-    name: `${option.expiryDate.display} - $${option.strike.raw}`,
-  }));
-
+  console.log(sortedData.slice(0, 20))
   return (
     <div className="container mx-auto p-4 bg-gray-100 text-black min-h-screen">
       <h2 className="text-2xl font-bold mb-4 text-gray-800">Put Options Analysis Dashboard</h2>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
         <div className="bg-white p-4 rounded shadow">
           <h3 className="font-bold mb-2">Current BTC Price</h3>
           <p className="text-2xl font-bold">${btcPrice.toLocaleString()}</p>
+        </div>
+        <div className="bg-white p-4 rounded shadow">
+          <h3 className="font-bold mb-2">Select Currency</h3>
+          <select
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            className="w-full p-2 border rounded"
+          >
+            <option value="BTC">BTC</option>
+            <option value="ETH">ETH</option>
+            <option value="SOL">SOL</option>
+            <option value="XRP">XRP</option>
+            <option value="MATIC">MATIC</option>
+            <option value="USDC">USDC</option>
+          </select>
+        </div>
+        <div className="bg-white p-4 rounded shadow">
+          <h3 className="font-bold mb-2">Option Type</h3>
+          <select
+            value={optionType}
+            onChange={(e) => setOptionType(e.target.value as OptionType)}
+            className="w-full p-2 border rounded"
+          >
+            <option value="put">Puts</option>
+            <option value="spread">Bear Put Spreads</option>
+          </select>
         </div>
         <div className="bg-white p-4 rounded shadow">
           <h3 className="font-bold mb-2">Investment Amount</h3>
@@ -379,19 +629,6 @@ const OptionsDashboard: React.FC = () => {
           />
         </div>
       </div>
-
-      {/* <div className="mb-8 bg-white p-4 rounded shadow">
-        <h3 className="text-xl font-bold mb-2">Hedge Efficiency Visualization</h3>
-        <ResponsiveContainer width="100%" height={400}>
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <XAxis type="number" dataKey="x" name="Days to Expiration" unit=" days" />
-            <YAxis type="number" dataKey="y" name="Hedge Efficiency" unit="x" />
-            <ZAxis type="number" dataKey="z" range={[50, 1000]} name="Total Cost" unit="$" />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-            <Scatter data={chartData} fill="#8884d8" />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div> */}
       <div className="mb-8 bg-white p-4 rounded shadow">
         <h3 className="text-xl font-bold mb-2">Hedge Efficiency Score Visualization</h3>
         <ResponsiveContainer width="100%" height={400}>
@@ -422,11 +659,11 @@ const OptionsDashboard: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {sortedData.map((option, index) => (
+            {sortedData.slice(0, 20).map((option, index) => (
               <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                 <td className="px-4 py-2">{option.exchange}</td>
                 {columns.map(({ key }) => (
-                  <td key={key} className="px-4 py-2">{option[key].display}</td>
+                  <td key={key} className="px-4 py-2">{option[key]?.display}</td>
                 ))}
               </tr>
             ))}
