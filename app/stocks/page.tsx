@@ -1,9 +1,12 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { ArrowUpDown } from 'lucide-react';
+import { ArrowUpDown, Shield, DollarSign, TrendingUp, Menu, X, Moon, Sun } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { motion, AnimatePresence } from 'framer-motion';
+import NavLink from '../components/NavLink';
 import Breadcrumbs from '../components/Breadcrumbs';
+import useDarkMode from '../hooks/useDarkMode';
 
 // Hardcoded API credentials
 const API_KEY = 'AKI6DSI3A1BXI3LSDA8A';
@@ -207,6 +210,9 @@ const StockOptionsDashboard: React.FC = () => {
   const [ivIncrease, setIvIncrease] = useState(0);
   const [ticker, setTicker] = useState('BITO');
 
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
+
   useEffect(() => {
     const fetchAlpacaData = async () => {
       setLoading(true);
@@ -406,9 +412,6 @@ const StockOptionsDashboard: React.FC = () => {
       return 0;
     });
 
-  if (loading) return <div className="text-center py-10">Loading...</div>;
-  if (error) return <div className="text-center py-10 text-red-500">Error: {error}</div>;
-
   const chartData = sortedData.map(option => ({
     x: option.daysToExpiration.raw,
     y: option.hedgeEfficiencyScore.raw,
@@ -416,94 +419,169 @@ const StockOptionsDashboard: React.FC = () => {
     name: `${option.expiryDate.display} - $${option.strike.raw}`,
   }));
 
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="text-2xl text-blue-600 dark:text-blue-400">Loading...</div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="text-2xl text-red-600 dark:text-red-400">Error: {error}</div>
+    </div>
+  );
+
   return (
-    <div className="container mx-auto p-4 bg-gray-100 text-black min-h-screen">
-      <Breadcrumbs items={[
-        { label: 'Stocks', href: '/stocks' },
-      ]} />
-      <h2 className="text-2xl font-bold mb-4 text-gray-800">Stock Options Analysis Dashboard</h2>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-bold mb-2">Ticker</h3>
-          <input
-            type="text"
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value.toUpperCase())}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-bold mb-2">Current {ticker} Price</h3>
-          <p className="text-2xl font-bold">${underlyingPrice.toLocaleString()}</p>
-        </div>
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-bold mb-2">Investment Amount</h3>
-          <input
-            type="number"
-            value={investmentAmount}
-            onChange={(e) => setInvestmentAmount(Number(e.target.value))}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-bold mb-2">Target Price</h3>
-          <input
-            type="number"
-            value={targetPrice}
-            onChange={(e) => setTargetPrice(Number(e.target.value))}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-        <div className="bg-white p-4 rounded shadow">
-          <h3 className="font-bold mb-2">IV Increase (%)</h3>
-          <input
-            type="number"
-            value={ivIncrease}
-            onChange={(e) => setIvIncrease(Number(e.target.value))}
-            className="w-full p-2 border rounded"
-          />
-        </div>
-      </div>
+    <div className={`flex flex-col min-h-screen ${isDarkMode ? 'dark' : ''}`}>
+      <div className="flex-grow bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 text-gray-800 dark:text-white transition-colors duration-300">
+        <header className="bg-white bg-opacity-10 dark:bg-gray-800 dark:bg-opacity-30 backdrop-filter backdrop-blur-lg fixed w-full z-10 transition-colors duration-300">
+          <div className="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-blue-600 dark:text-blue-400">Crypto Hedge</h1>
+            <div className="flex items-center space-x-6">
+              <nav className="hidden md:flex space-x-6">
+                <NavLink href="/">Home</NavLink>
+                <NavLink href="/hedge">Hedging</NavLink>
+                <NavLink href="/income">Income</NavLink>
+                <NavLink href="/stocks">Stocks</NavLink>
+              </nav>
+              <button
+                onClick={toggleDarkMode}
+                className="text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors duration-200"
+              >
+                {isDarkMode ? <Sun size={24} /> : <Moon size={24} />}
+              </button>
+              <button
+                className="md:hidden text-gray-600 dark:text-gray-300"
+                onClick={() => setIsMenuOpen(!isMenuOpen)}
+              >
+                {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+              </button>
+            </div>
+          </div>
+        </header>
 
-      <div className="mb-8 bg-white p-4 rounded shadow">
-        <h3 className="text-xl font-bold mb-2">Hedge Efficiency Score Visualization</h3>
-        <ResponsiveContainer width="100%" height={400}>
-          <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-            <XAxis type="number" dataKey="x" name="Days to Expiration" unit=" days" />
-            <YAxis type="number" dataKey="y" name="Hedge Efficiency Score" unit="" />
-            <ZAxis type="number" dataKey="z" range={[50, 1000]} name="Total Cost" unit="$" />
-            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-            <Scatter data={chartData} fill="#8884d8" />
-          </ScatterChart>
-        </ResponsiveContainer>
-      </div>
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+              className="md:hidden fixed inset-0 bg-white dark:bg-gray-800 bg-opacity-95 dark:bg-opacity-95 z-20 flex flex-col items-center justify-center space-y-6"
+            >
+              <NavLink href="/">Home</NavLink>
+              <NavLink href="/hedge">Hedging</NavLink>
+              <NavLink href="/income">Income</NavLink>
+              <NavLink href="/stocks">Stocks</NavLink>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      <div className="overflow-x-auto bg-white rounded-lg shadow">
-        <table className="min-w-full">
-          <thead>
-            <tr className="bg-gray-200">
-              {columns.map(({ key, label }) => (
-                <th
-                  key={key}
-                  className="px-4 py-2 text-left cursor-pointer hover:bg-gray-300"
-                  onClick={() => handleSort(key)}
-                >
-                  {label} <ArrowUpDown className="inline" size={16} />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sortedData.map((option, index) => (
-              <tr key={index} className={index % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                {columns.map(({ key }) => (
-                  <td key={key} className="px-4 py-2">{option[key].display}</td>
+        <main className="container mx-auto px-4 pt-24 pb-12">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-gray-800 dark:text-white">
+              Stock Options <span className="text-blue-600 dark:text-blue-400">Analysis Dashboard</span>
+            </h2>
+          </motion.div>
+          <Breadcrumbs items={[
+            { label: 'Stocks', href: '/stocks' },
+          ]} />
+
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Current {ticker} Price</h3>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">${underlyingPrice.toLocaleString()}</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Ticker</h3>
+              <input
+                type="text"
+                value={ticker}
+                onChange={(e) => setTicker(e.target.value.toUpperCase())}
+                className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
+              />
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Investment Amount</h3>
+              <input
+                type="number"
+                value={investmentAmount}
+                onChange={(e) => setInvestmentAmount(Number(e.target.value))}
+                className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
+              />
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Target Price</h3>
+              <input
+                type="number"
+                value={targetPrice}
+                onChange={(e) => setTargetPrice(Number(e.target.value))}
+                className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
+              />
+            </div>
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">IV Increase (%)</h3>
+              <input
+                type="number"
+                value={ivIncrease}
+                onChange={(e) => setIvIncrease(Number(e.target.value))}
+                className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div className="mb-8 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+            <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Hedge Efficiency Score Visualization</h3>
+            <ResponsiveContainer width="100%" height={400}>
+              <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <XAxis type="number" dataKey="x" name="Days to Expiration" unit=" days" />
+                <YAxis type="number" dataKey="y" name="Hedge Efficiency Score" unit="" />
+                <ZAxis type="number" dataKey="z" range={[50, 1000]} name="Total Cost" unit="$" />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                <Scatter data={chartData} fill="#3B82F6" />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow-md">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-gray-100 dark:bg-gray-700">
+                  {columns.map(({ key, label }) => (
+                    <th
+                      key={key}
+                      className="px-4 py-2 text-left cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300"
+                      onClick={() => handleSort(key)}
+                    >
+                      {label} <ArrowUpDown className="inline" size={16} />
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedData.map((option, index) => (
+                  <tr key={index} className={index % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'}>
+                    {columns.map(({ key }) => (
+                      <td key={key} className="px-4 py-2 text-gray-800 dark:text-gray-200">{option[key].display}</td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </tbody>
+            </table>
+          </div>
+        </main>
       </div>
+
+      <footer className="bg-gray-100 dark:bg-gray-800 py-6 transition-colors duration-300">
+        <div className="container mx-auto px-4 text-center text-gray-600 dark:text-gray-400">
+          &copy; 2024 Crypto Hedge. All rights reserved.
+        </div>
+      </footer>
     </div>
   );
 };

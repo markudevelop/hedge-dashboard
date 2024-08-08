@@ -2,12 +2,8 @@
 import React, { useState } from 'react';
 import { ArrowRight, Shield, DollarSign, TrendingUp, Menu, X, Moon, Sun } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const NavLink = ({ href, children }) => (
-  <a href={href} className="text-gray-200 hover:text-white transition-colors duration-200">
-    {children}
-  </a>
-);
+import useDarkMode from './hooks/useDarkMode';
+import NavLink from './components/NavLink';
 
 const FeatureCard = ({ icon: Icon, title, description, linkText, href }) => (
   <motion.a
@@ -26,12 +22,7 @@ const FeatureCard = ({ icon: Icon, title, description, linkText, href }) => (
 
 export default function Home() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
+  const { isDarkMode, toggleDarkMode } = useDarkMode();
 
   return (
     <div className={`flex flex-col min-h-screen ${isDarkMode ? 'dark' : ''}`}>
@@ -111,7 +102,7 @@ export default function Home() {
             />
             <FeatureCard
               icon={TrendingUp}
-              title="Market Analysis"
+              title="Stock Analysis"
               description="Analyze crypto market trends to identify the best trading opportunities."
               linkText="Analyze Markets"
               href="/stocks"
