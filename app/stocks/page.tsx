@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowUpDown } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import Breadcrumbs from '../components/Breadcrumbs';
 
 // Hardcoded API credentials
 const API_KEY = 'AKI6DSI3A1BXI3LSDA8A';
@@ -210,7 +211,7 @@ const StockOptionsDashboard: React.FC = () => {
     const fetchAlpacaData = async () => {
       setLoading(true);
       setError(null);
-  
+
       try {
         // Fetch the current price of the underlying asset
         const quoteResponse = await fetch(`https://data.alpaca.markets/v2/stocks/${ticker}/quotes/latest`, {
@@ -219,16 +220,16 @@ const StockOptionsDashboard: React.FC = () => {
             'APCA-API-SECRET-KEY': API_SECRET,
           },
         });
-  
+
         if (!quoteResponse.ok) {
           throw new Error(`HTTP error! status: ${quoteResponse.status} while fetching quote`);
         }
-  
+
         const quoteData = await quoteResponse.json();
         const currentPrice = (quoteData.quote.ap + quoteData.quote.bp) / 2;
         setUnderlyingPrice(currentPrice);
         setTargetPrice(currentPrice * 0.8);
-  
+
         // Fetch options data
         const optionsResponse = await fetch(`https://data.alpaca.markets/v1beta1/options/snapshots/${ticker}?feed=indicative&limit=100`, {
           headers: {
@@ -236,11 +237,11 @@ const StockOptionsDashboard: React.FC = () => {
             'APCA-API-SECRET-KEY': API_SECRET,
           },
         });
-  
+
         if (!optionsResponse.ok) {
           throw new Error(`HTTP error! status: ${optionsResponse.status} while fetching options`);
         }
-  
+
         const optionsData = await optionsResponse.json();
         setOptionsData(optionsData.snapshots);
       } catch (err) {
@@ -250,7 +251,7 @@ const StockOptionsDashboard: React.FC = () => {
         setLoading(false);
       }
     };
-  
+
     fetchAlpacaData();
   }, [ticker]);
 
@@ -272,50 +273,50 @@ const StockOptionsDashboard: React.FC = () => {
     const expiryMonth = expiryDatePart.slice(2, 4);
     const expiryDay = expiryDatePart.slice(4, 6);
     const expiryDate = `${expiryYear}-${expiryMonth}-${expiryDay}`;
-    
+
     const strikeAndType = optionKey.slice(10); // Extracting the strike and option type part
     const optionType = strikeAndType.slice(0, 1); // Extracting the option type
     const strike = parseFloat(strikeAndType.slice(1)); // Extracting the strike price
-    
+
     const now = new Date();
     const expiry = new Date(`${expiryYear}-${expiryMonth}-${expiryDay}`);
     const daysToExpiration = Math.max(0, Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-  
+
     const T = daysToExpiration / 365;
     const r = 0.01; // Risk-free rate (assumed)
     const S = underlyingPrice;
     const K = strike;
-  
+
     // Use the implied volatility from the API response
     const sigma = option.impliedVolatility || 0.3; // If IV is not provided, fallback to 0.3
-  
+
     const increasedSigma = sigma * (1 + ivIncrease / 100);
-  
+
     // Use bid-ask midpoint for option price
     const optionPrice = (option.latestQuote.ap + option.latestQuote.bp) / 2;
-  
+
     const theoreticalPrice = optionType === 'P'
       ? blackScholesPut(S, K, T, r, sigma)
       : blackScholesCall(S, K, T, r, sigma);
-  
+
     const theoreticalPriceAtTargetValue = optionType === 'P'
       ? blackScholesPut(targetPrice, K, T / 2, r, increasedSigma)
       : blackScholesCall(targetPrice, K, T / 2, r, increasedSigma);
-  
+
     const contractCost = optionPrice * 100; // Assuming each contract is for 100 shares
     const contracts = Math.floor(investmentAmount / contractCost);
     const totalCost = contracts * contractCost;
-  
+
     const hedgeCoverageReturn = contracts * theoreticalPriceAtTargetValue * 100;
-  
+
     const hedgeEfficiency = hedgeCoverageReturn / totalCost;
     const hedgeEfficiencyPerDay = hedgeEfficiency / daysToExpiration;
-  
+
     const minimumDuration = 30;
     const dailyCost = totalCost / daysToExpiration;
     const durationInDays = Math.min(daysToExpiration, Math.floor(investmentAmount / dailyCost));
     const hedgeEfficiencyScore = (hedgeCoverageReturn / totalCost) * (durationInDays / minimumDuration);
-  
+
     // Calculate Greeks (these are simplified approximations)
     const delta = optionType === 'P' ? -cumulativeNormalDistribution(-d1(S, K, T, r, sigma)) : cumulativeNormalDistribution(d1(S, K, T, r, sigma));
     const gamma = Math.exp(-Math.pow(d1(S, K, T, r, sigma), 2) / 2) / (S * sigma * Math.sqrt(2 * Math.PI * T));
@@ -323,7 +324,7 @@ const StockOptionsDashboard: React.FC = () => {
     const theta = optionType === 'P'
       ? (-S * sigma * Math.exp(-Math.pow(d1(S, K, T, r, sigma), 2) / 2) / (2 * Math.sqrt(T)) - r * K * Math.exp(-r * T) * cumulativeNormalDistribution(-d2(S, K, T, r, sigma))) / 365
       : (-S * sigma * Math.exp(-Math.pow(d1(S, K, T, r, sigma), 2) / 2) / (2 * Math.sqrt(T)) + r * K * Math.exp(-r * T) * cumulativeNormalDistribution(d2(S, K, T, r, sigma))) / 365;
-  
+
     return {
       expiryDate: { display: `${expiryMonth} ${expiryDay} ${expiryYear}`, raw: expiry.getTime() },
       strike: { display: `$${K.toFixed(2)}`, raw: K },
@@ -346,14 +347,14 @@ const StockOptionsDashboard: React.FC = () => {
       hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
     };
   };
-  
+
   // Helper functions for Black-Scholes calculations
   const d1 = (S: number, K: number, T: number, r: number, sigma: number): number =>
     (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
-  
+
   const d2 = (S: number, K: number, T: number, r: number, sigma: number): number =>
     d1(S, K, T, r, sigma) - sigma * Math.sqrt(T);
-  
+
   const cumulativeNormalDistribution = (x: number): number => {
     const a1 = 0.254829592;
     const a2 = -0.284496736;
@@ -367,19 +368,19 @@ const StockOptionsDashboard: React.FC = () => {
     const erf = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-z * z));
     return 0.5 * (1 + sign * erf);
   };
-  
+
   const blackScholesPut = (S: number, K: number, T: number, r: number, sigma: number): number => {
     const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
     const d2 = d1 - sigma * Math.sqrt(T);
     return K * Math.exp(-r * T) * cumulativeNormalDistribution(-d2) - S * cumulativeNormalDistribution(-d1);
   };
-  
+
   const blackScholesCall = (S: number, K: number, T: number, r: number, sigma: number): number => {
     const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
     const d2 = d1 - sigma * Math.sqrt(T);
     return S * cumulativeNormalDistribution(d1) - K * Math.exp(-r * T) * cumulativeNormalDistribution(d2);
   };
-  
+
   // In your component:
   const sortedData = Object.entries(optionsData)
     // .filter(([key]) => key.endsWith('P')) // Filter for put options
@@ -387,21 +388,21 @@ const StockOptionsDashboard: React.FC = () => {
     .sort((a, b) => {
       const aValue = a[sortColumn].raw;
       const bValue = b[sortColumn].raw;
-  
+
       if (aValue === null && bValue === null) return 0;
       if (aValue === null) return 1;
       if (bValue === null) return -1;
-  
+
       if (typeof aValue === 'number' && typeof bValue === 'number') {
         return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
       }
-  
+
       if (typeof aValue === 'string' && typeof bValue === 'string') {
         return sortDirection === 'asc'
           ? aValue.localeCompare(bValue)
           : bValue.localeCompare(aValue);
       }
-  
+
       return 0;
     });
 
@@ -417,6 +418,9 @@ const StockOptionsDashboard: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4 bg-gray-100 text-black min-h-screen">
+      <Breadcrumbs items={[
+        { label: 'Stocks', href: '/stocks' },
+      ]} />
       <h2 className="text-2xl font-bold mb-4 text-gray-800">Stock Options Analysis Dashboard</h2>
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-4">
         <div className="bg-white p-4 rounded shadow">
@@ -460,7 +464,7 @@ const StockOptionsDashboard: React.FC = () => {
           />
         </div>
       </div>
-  
+
       <div className="mb-8 bg-white p-4 rounded shadow">
         <h3 className="text-xl font-bold mb-2">Hedge Efficiency Score Visualization</h3>
         <ResponsiveContainer width="100%" height={400}>
@@ -473,7 +477,7 @@ const StockOptionsDashboard: React.FC = () => {
           </ScatterChart>
         </ResponsiveContainer>
       </div>
-  
+
       <div className="overflow-x-auto bg-white rounded-lg shadow">
         <table className="min-w-full">
           <thead>
