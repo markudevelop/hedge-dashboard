@@ -23,11 +23,11 @@ type OptionData = {
 
 type MetricValue = {
     display: string;
-    raw: number | null;
+    raw: number | string | null;
 };
 
 type CalculatedMetrics = {
-    option: OptionData;
+    // option: OptionData;
     expiryDate: MetricValue;
     strike: MetricValue;
     markPrice: MetricValue;
@@ -44,7 +44,7 @@ type CalculatedMetrics = {
     gamma: MetricValue;
     vega: MetricValue;
     theta: MetricValue;
-    exchange: 'Deribit' | 'Bybit';
+    exchange: MetricValue;
 };
 
 type Column = {
@@ -211,7 +211,7 @@ const PremiumSellingDashboard: React.FC = () => {
         const theta = calculateTheta(S, K, T, r, sigma, optionType);
 
         return {
-            option,
+            // option,
             expiryDate: { display: expiryDate, raw: expiryTimestamp },
             strike: { display: `$${strike.toLocaleString()}`, raw: strike },
             markPrice: { display: option.mark_price.toFixed(4), raw: option.mark_price },
@@ -224,11 +224,11 @@ const PremiumSellingDashboard: React.FC = () => {
             expectedValue: { display: expectedValue.toFixed(4), raw: expectedValue },
             timeDecay: { display: theta.toFixed(6), raw: theta },
             totalProfitIfOTM: { display: `${totalProfitIfOTM.toFixed(2)}`, raw: totalProfitIfOTM },
-            // delta: { display: delta.toFixed(4), raw: delta },
-            // gamma: { display: gamma.toFixed(6), raw: gamma },
-            // vega: { display: vega.toFixed(4), raw: vega },
-            // theta: { display: theta.toFixed(6), raw: theta },
-            exchange: option.exchange,
+            delta: { display: delta.toFixed(4), raw: delta },
+            gamma: { display: gamma.toFixed(6), raw: gamma },
+            vega: { display: vega.toFixed(4), raw: vega },
+            theta: { display: theta.toFixed(6), raw: theta },
+            exchange: { display: option.exchange, raw: option.exchange },
         };
     }, [optionType, currency, contractQuantity]);
 
@@ -298,7 +298,7 @@ const PremiumSellingDashboard: React.FC = () => {
         const calculatedData = validOptions.map(option => calculateMetrics(option)).filter(Boolean);
 
         return calculatedData
-            .filter(option => option.probabilityOTM.raw >= minProbabilityOTM)
+            .filter(option => option.probabilityOTM.raw as number >= minProbabilityOTM)
             .sort((a, b) => {
                 const aValue = a[sortColumn].raw;
                 const bValue = b[sortColumn].raw;
@@ -307,7 +307,7 @@ const PremiumSellingDashboard: React.FC = () => {
                 if (aValue === null) return 1;
                 if (bValue === null) return -1;
 
-                return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+                return sortDirection === 'asc' ? Number(aValue) - Number(bValue) : Number(bValue) - Number(aValue);
             });
     }, [optionsData, filterValidOptions, calculateMetrics, sortColumn, sortDirection, minProbabilityOTM]);
 
@@ -490,7 +490,7 @@ const PremiumSellingDashboard: React.FC = () => {
                   <tbody>
                     {sortedData.slice(0, 40).map((option, index) => (
                       <tr key={index} className={index % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'}>
-                        <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{option.exchange}</td>
+                        <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{option.exchange.display}</td>
                         {columns.map(({ key }) => (
                           <td key={key} className="px-4 py-2 text-gray-800 dark:text-gray-200">{option[key]?.display}</td>
                         ))}

@@ -267,7 +267,7 @@ const StockOptionsDashboard: React.FC = () => {
   };
   const calculateMetrics = (
     optionKey: string,
-    option: ApiOptionData,
+    option: StockOptionData,
     underlyingPrice: number,
     investmentAmount: number,
     targetPrice: number,
@@ -403,11 +403,11 @@ const StockOptionsDashboard: React.FC = () => {
         return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
       }
 
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortDirection === 'asc'
-          ? aValue.localeCompare(bValue)
-          : bValue.localeCompare(aValue);
-      }
+      // if (typeof aValue === 'string' && typeof bValue === 'string') {
+      //   return sortDirection === 'asc'
+      //     ? aValue.localeCompare(bValue)
+      //     : bValue.localeCompare(aValue);
+      // }
 
       return 0;
     });

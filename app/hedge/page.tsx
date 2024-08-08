@@ -23,11 +23,12 @@ type OptionData = {
 
 type MetricValue = {
   display: string;
-  raw: number | null;
+  raw: number | number[] | string | null;
 };
 
 type CalculatedMetrics = {
-  option: OptionData;
+  // option: OptionData;
+
   expiryDate: MetricValue;
   strike: MetricValue;
   markPrice: MetricValue;
@@ -49,7 +50,7 @@ type CalculatedMetrics = {
   hedgeEfficiencyScore: MetricValue;
   hedgeEfficiency: MetricValue;
   hedgeEfficiencyPerDay: MetricValue;
-  exchange: 'Deribit' | 'Bybit';
+  exchange: MetricValue;
   // Spreads
   longStrike?: MetricValue;
   shortStrike?: MetricValue;
@@ -57,6 +58,8 @@ type CalculatedMetrics = {
   maxProfit?: MetricValue;
   maxLoss?: MetricValue;
   breakEvenPrice?: MetricValue;
+  lowerBreakEven?: MetricValue;
+  upperBreakEven?: MetricValue;
 };
 
 type Column = {
@@ -255,9 +258,9 @@ const OptionsDashboard: React.FC = () => {
     const hedgeEfficiencyScore = (hedgeCoverageReturn / totalCost) * (durationInDays / minimumDuration);
 
     return {
-      option: {
-        ...option,
-      },
+      // option: {
+      //   ...option,
+      // },
       expiryDate: { display: expiryDate, raw: expiryTimestamp },
       strike: { display: `$${strike.toLocaleString()}`, raw: strike },
       optionPrice: { display: optionPrice.toFixed(4), raw: optionPrice },
@@ -278,7 +281,7 @@ const OptionsDashboard: React.FC = () => {
       hedgeCoverageReturn: { display: `$${hedgeCoverageReturn.toFixed(2)}`, raw: hedgeCoverageReturn },
       hedgeEfficiency: { display: hedgeEfficiency.toFixed(2), raw: hedgeEfficiency },
       hedgeEfficiencyPerDay: { display: hedgeEfficiencyPerDay.toFixed(4), raw: hedgeEfficiencyPerDay },
-      exchange: option.exchange,
+      exchange: { display: option.exchange, raw: option.exchange },
       hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
     };
   }, [investmentAmount, targetPrice, ivIncrease]);
@@ -429,8 +432,8 @@ const OptionsDashboard: React.FC = () => {
     const breakEvenPrice = shortStrike - netPremium;
 
     return {
-      longOption,
-      shortOption,
+      // longOption,
+      // shortOption,
       expiryDate: { display: longExpiryDate, raw: expiryTimestamp },
       strike: { display: `$${shortStrike.toLocaleString()} - $${longStrike.toLocaleString()}`, raw: [shortStrike, longStrike] },
       markPrice: { display: netPremium.toFixed(4), raw: netPremium },
@@ -455,7 +458,7 @@ const OptionsDashboard: React.FC = () => {
       maxProfit: { display: `$${maxProfit.toFixed(2)}`, raw: maxProfit },
       maxLoss: { display: `$${maxLoss.toFixed(2)}`, raw: maxLoss },
       breakEvenPrice: { display: `$${breakEvenPrice.toFixed(2)}`, raw: breakEvenPrice },
-      exchange: longOption.exchange,
+      exchange: { display: longOption.exchange, raw: longOption.exchange },
       longStrike: { display: `$${longStrike.toLocaleString()}`, raw: longStrike },
       shortStrike: { display: `$${shortStrike.toLocaleString()}`, raw: shortStrike },
       spreadWidth: { display: `$${spreadWidth.toFixed(2)}`, raw: spreadWidth },
@@ -618,7 +621,7 @@ const OptionsDashboard: React.FC = () => {
     const upperBreakEven = highStrike - netPremium;
 
     return {
-      option: lowStrikeOption, // Using the low strike option as the base for consistency
+      // option: lowStrikeOption, // Using the low strike option as the base for consistency
       expiryDate: { display: expiryDate, raw: expiryTimestamp },
       strike: { display: `${lowStrike}-${midStrike}-${highStrike}`, raw: [lowStrike, midStrike, highStrike] },
       markPrice: { display: netPremium.toFixed(4), raw: netPremium },
@@ -644,7 +647,7 @@ const OptionsDashboard: React.FC = () => {
       maxLoss: { display: `$${maxLoss.toFixed(2)}`, raw: maxLoss },
       lowerBreakEven: { display: `$${lowerBreakEven.toFixed(2)}`, raw: lowerBreakEven },
       upperBreakEven: { display: `$${upperBreakEven.toFixed(2)}`, raw: upperBreakEven },
-      exchange: lowStrikeOption.exchange,
+      exchange: { display: lowStrikeOption.exchange, raw: lowStrikeOption.exchange },
       longStrike: { display: `$${lowStrike.toLocaleString()}`, raw: lowStrike },
       shortStrike: { display: `$${midStrike.toLocaleString()}`, raw: midStrike },
       spreadWidth: { display: `$${(highStrike - lowStrike).toFixed(2)}`, raw: highStrike - lowStrike },
@@ -936,7 +939,7 @@ const OptionsDashboard: React.FC = () => {
               <tbody>
                 {sortedData.slice(0, 40).map((option, index) => (
                   <tr key={index} className={index % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'}>
-                    <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{option.exchange}</td>
+                    <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{option.exchange.display}</td>
                     {columns.map(({ key }) => (
                       <td key={key} className="px-4 py-2 text-gray-800 dark:text-gray-200">{option[key]?.display}</td>
                     ))}

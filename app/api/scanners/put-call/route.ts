@@ -105,9 +105,9 @@ function findATMOptions(optionsSnapshots: any, currentPrice: number) {
 
         if (strike === closestStrike) {
             if (type === 'C') {
-                atmOptions.call = { symbol, ...option, strike };
+                atmOptions.call = { symbol, ...option as {}, strike };
             } else {
-                atmOptions.put = { symbol, ...option, strike };
+                atmOptions.put = { symbol, ...option as {}, strike };
             }
         }
     }
@@ -273,7 +273,7 @@ export async function GET(request: Request) {
 
         const [activeStocks, movers] = await Promise.all([getActiveStocks(), getMovers()]);
 
-        const stocksToScan = [...new Set([...activeStocks, ...movers])];
+        const stocksToScan = [...new Set([...activeStocks, ...movers]) as any];
 
         const validResults = await scanStocksWithDelay(stocksToScan, threshold);
 
