@@ -67,7 +67,9 @@ type Column = {
   label: string;
 };
 
-type OptionType = 'put' | 'spread';
+type OptionType = 'put' | 'spread' | 'butterfly' | 'ratioBackspread';
+
+const TARGET_PRICE = 0.7; // 30% OTM
 
 const columns: Column[] = [
   { key: 'expiryDate', label: 'Expiry' },
@@ -111,13 +113,14 @@ const OptionsDashboard: React.FC = () => {
   const [optionsData, setOptionsData] = useState<OptionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortColumn, setSortColumn] = useState<keyof CalculatedMetrics>('hedgeCoverageReturn');
+  const [sortColumn, setSortColumn] = useState<keyof CalculatedMetrics>('hedgeEfficiencyPerDay');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [btcPrice, setBtcPrice] = useState(0);
-  const [investmentAmount, setInvestmentAmount] = useState(4000);
+  const [investmentAmount, setInvestmentAmount] = useState(1000);
   const [targetPrice, setTargetPrice] = useState(0);
   const [ivIncrease, setIvIncrease] = useState(150); // 20% IV increase by default
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [ratioBackspreadRatio, setRatioBackspreadRatio] = useState(2);
 
   const { isDarkMode, toggleDarkMode } = useDarkMode();
 
@@ -186,7 +189,7 @@ const OptionsDashboard: React.FC = () => {
         setOptionsData(allOptions);
         if (allOptions.length > 0) {
           setBtcPrice(allOptions[allOptions.length - 1].underlying_price);
-          setTargetPrice(allOptions[allOptions.length - 1].underlying_price * 0.4);
+          setTargetPrice(allOptions[allOptions.length - 1].underlying_price * TARGET_PRICE);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -392,7 +395,7 @@ const OptionsDashboard: React.FC = () => {
     const increasedSigmaLong = sigmaLong * (1 + ivIncrease / 100);
     const increasedSigmaShort = sigmaShort * (1 + ivIncrease / 100);
 
-    const theoreticalPrice = blackScholesPut(S, shortStrike, T, r, sigmaShort) - blackScholesPut(S, longStrike, T, r, sigmaLong) ;
+    const theoreticalPrice = blackScholesPut(S, shortStrike, T, r, sigmaShort) - blackScholesPut(S, longStrike, T, r, sigmaLong);
 
     // Calculate theoretical price at target using Black-Scholes
     const longPutPriceAtTarget = blackScholesPut(targetPrice, longStrike, T / 2, r, increasedSigmaLong);
@@ -654,6 +657,238 @@ const OptionsDashboard: React.FC = () => {
     };
   }, [investmentAmount, targetPrice, ivIncrease, calculateDelta, calculateGamma, calculateVega, calculateTheta]);
 
+  // const calculateRatioBackspreadMetrics = useMemo(() => (longOption: OptionData, shortOption: OptionData): CalculatedMetrics | null => {
+  //   const [, longExpiryDate] = longOption.instrument_name.split('-');
+  //   const [, shortExpiryDate] = shortOption.instrument_name.split('-');
+  //   if (longExpiryDate !== shortExpiryDate) {
+  //     return null;
+  //   }
+
+  //   const longStrike = parseFloat(longOption.instrument_name.split('-')[2]);
+  //   const shortStrike = parseFloat(shortOption.instrument_name.split('-')[2]);
+
+  //   if (isNaN(shortStrike) || isNaN(longStrike) || shortStrike >= longStrike) {
+  //     return null;
+  //   }
+
+  //   // Check for valid prices
+  //   if (!isValidPrice(longOption.bid_price) || !isValidPrice(longOption.ask_price) ||
+  //     !isValidPrice(shortOption.bid_price) || !isValidPrice(shortOption.ask_price)) {
+  //     return null;
+  //   }
+
+  //   // Calculate the ratio backspread's prices
+  //   const longQuantity = ratioBackspreadRatio;
+  //   const shortQuantity = 1;
+  //   const netCredit = (shortOption.bid_price * shortQuantity) - (longOption.ask_price * longQuantity);
+
+  //   const underlyingPrice = (longOption.underlying_price + shortOption.underlying_price) / 2;
+
+  //   // Calculate maximum loss and maximum profit
+  //   const maxLoss = shortStrike - longStrike + netCredit;
+  //   const maxProfit = (longStrike * longQuantity) - (shortStrike * shortQuantity) + netCredit;
+
+  //   // Calculate break-even points
+  //   const lowerBreakEven = shortStrike - netCredit;
+  //   const upperBreakEven = longStrike + (maxLoss / (longQuantity - shortQuantity));
+
+  //   const expiryTimestamp = new Date(longExpiryDate).getTime();
+  //   const now = Date.now();
+  //   const daysToExpiration = Math.max(0, Math.ceil((expiryTimestamp - now) / (1000 * 60 * 60 * 24)));
+
+  //   const T = daysToExpiration / 365;
+  //   const r = 0.01; // risk-free rate (assumed)
+  //   const S = underlyingPrice;
+
+  //   const sigmaLong = longOption.mark_iv / 100;
+  //   const sigmaShort = shortOption.mark_iv / 100;
+
+  //   // Increase IV for target price calculation
+  //   const increasedSigmaLong = sigmaLong * (1 + ivIncrease / 100);
+  //   const increasedSigmaShort = sigmaShort * (1 + ivIncrease / 100);
+
+  //   // Calculate theoretical price at target using Black-Scholes
+  //   const longPutPriceAtTarget = blackScholesPut(targetPrice, longStrike, T / 2, r, increasedSigmaLong);
+  //   const shortPutPriceAtTarget = blackScholesPut(targetPrice, shortStrike, T / 2, r, increasedSigmaShort);
+  //   const theoreticalPriceAtTarget = (longPutPriceAtTarget * longQuantity) - (shortPutPriceAtTarget * shortQuantity);
+
+  //   // Calculate Greeks
+  //   const longDelta = calculateDelta(S, longStrike, T, r, sigmaLong, 'put');
+  //   const shortDelta = calculateDelta(S, shortStrike, T, r, sigmaShort, 'put');
+  //   const backspreadDelta = (longDelta * longQuantity) - (shortDelta * shortQuantity);
+
+  //   const longGamma = calculateGamma(S, longStrike, T, r, sigmaLong);
+  //   const shortGamma = calculateGamma(S, shortStrike, T, r, sigmaShort);
+  //   const backspreadGamma = (longGamma * longQuantity) - (shortGamma * shortQuantity);
+
+  //   const longVega = calculateVega(S, longStrike, T, r, sigmaLong);
+  //   const shortVega = calculateVega(S, shortStrike, T, r, sigmaShort);
+  //   const backspreadVega = (longVega * longQuantity) - (shortVega * shortQuantity);
+
+  //   const longTheta = calculateTheta(S, longStrike, T, r, sigmaLong, 'put');
+  //   const shortTheta = calculateTheta(S, shortStrike, T, r, sigmaShort, 'put');
+  //   const backspreadTheta = (longTheta * longQuantity) - (shortTheta * shortQuantity);
+
+  //   // Calculate potential return at target price
+  //   const potentialReturnAtTarget = theoreticalPriceAtTarget - netCredit;
+
+  //   // Calculate risk-reward ratio
+  //   const riskRewardRatio = maxProfit / maxLoss;
+
+  //   // Calculate a modified hedge efficiency score
+  //   const hedgeEfficiencyScore = (potentialReturnAtTarget / maxLoss) * (Math.min(daysToExpiration, 30) / 30);
+
+  //   // const hedgeEfficiencyPerDay = hedgeEfficiency / daysToExpiration;
+
+  //   const totalCost = 0;
+
+  //   return {
+  //     expiryDate: { display: longExpiryDate, raw: expiryTimestamp },
+  //     strike: { display: `${shortStrike}-${longStrike} (${shortQuantity}:${longQuantity})`, raw: [shortStrike, longStrike] },
+  //     markPrice: { display: netCredit.toFixed(4), raw: netCredit },
+  //     bidPrice: { display: shortOption.bid_price.toFixed(4), raw: shortOption.bid_price },
+  //     askPrice: { display: longOption.ask_price.toFixed(4), raw: longOption.ask_price },
+  //     optionPrice: { display: netCredit.toFixed(4), raw: netCredit },
+  //     maxLoss: { display: `$${maxLoss.toFixed(2)}`, raw: maxLoss },
+  //     maxProfit: { display: `$${maxProfit.toFixed(2)}`, raw: maxProfit },
+  //     theoreticalPrice: { display: `$${netCredit.toFixed(4)}`, raw: netCredit },
+  //     totalCost: { display: `$${totalCost.toFixed(2)}`, raw: totalCost },
+  //     theoreticalPriceAtTarget: { display: `$${theoreticalPriceAtTarget.toFixed(4)}`, raw: theoreticalPriceAtTarget },
+  //     potentialReturnAtTarget: { display: `$${potentialReturnAtTarget.toFixed(2)}`, raw: potentialReturnAtTarget },
+  //     daysToExpiration: { display: daysToExpiration.toString(), raw: daysToExpiration },
+  //     impliedVolatility: { display: `${((sigmaLong + sigmaShort) / 2 * 100).toFixed(2)}%`, raw: (sigmaLong + sigmaShort) / 2 },
+  //     delta: { display: backspreadDelta.toFixed(4), raw: backspreadDelta },
+  //     gamma: { display: backspreadGamma.toFixed(6), raw: backspreadGamma },
+  //     vega: { display: backspreadVega.toFixed(4), raw: backspreadVega },
+  //     theta: { display: backspreadTheta.toFixed(4), raw: backspreadTheta },
+  //     riskRewardRatio: { display: riskRewardRatio.toFixed(2), raw: riskRewardRatio },
+  //     hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
+  //     lowerBreakEven: { display: `$${lowerBreakEven.toFixed(2)}`, raw: lowerBreakEven },
+  //     upperBreakEven: { display: `$${upperBreakEven.toFixed(2)}`, raw: upperBreakEven },
+  //     exchange: { display: longOption.exchange, raw: longOption.exchange },
+  //     longStrike: { display: `$${longStrike.toLocaleString()}`, raw: longStrike },
+  //     shortStrike: { display: `$${shortStrike.toLocaleString()}`, raw: shortStrike },
+  //     spreadWidth: { display: `$${(longStrike - shortStrike).toFixed(2)}`, raw: longStrike - shortStrike },
+  //   };
+  // }, [investmentAmount, targetPrice, ivIncrease, ratioBackspreadRatio, calculateDelta, calculateGamma, calculateVega, calculateTheta]);
+
+  const calculateRatioBackspreadMetrics = useMemo(() => (longOption: OptionData, shortOption: OptionData): CalculatedMetrics | null => {
+    const [, longExpiryDate] = longOption.instrument_name.split('-');
+    const [, shortExpiryDate] = shortOption.instrument_name.split('-');
+    if (longExpiryDate !== shortExpiryDate) {
+      return null;
+    }
+
+    const longStrike = parseFloat(longOption.instrument_name.split('-')[2]);
+    const shortStrike = parseFloat(shortOption.instrument_name.split('-')[2]);
+
+    if (isNaN(shortStrike) || isNaN(longStrike) || shortStrike >= longStrike) {
+      return null;
+    }
+
+    // Check for valid prices
+    if (!isValidPrice(longOption.bid_price) || !isValidPrice(longOption.ask_price) ||
+      !isValidPrice(shortOption.bid_price) || !isValidPrice(shortOption.ask_price)) {
+      return null;
+    }
+
+    // Calculate the ratio backspread's prices
+    const longQuantity = ratioBackspreadRatio;
+    const shortQuantity = 1;
+    const netPremium = (shortOption.bid_price * shortQuantity) - (longOption.ask_price * longQuantity);
+
+    const underlyingPrice = (longOption.underlying_price + shortOption.underlying_price) / 2;
+
+    const contractCost = Math.abs(netPremium) * underlyingPrice;
+    const contracts = Math.floor(investmentAmount / contractCost);
+
+    if (contracts <= 0) {
+      return null;
+    }
+
+    const totalCost = contracts * contractCost;
+
+    const expiryTimestamp = new Date(longExpiryDate).getTime();
+    const now = Date.now();
+    const daysToExpiration = Math.max(0, Math.ceil((expiryTimestamp - now) / (1000 * 60 * 60 * 24)));
+
+    const T = daysToExpiration / 365;
+    const r = 0.01; // risk-free rate (assumed)
+    const S = underlyingPrice;
+
+    const sigmaLong = longOption.mark_iv / 100;
+    const sigmaShort = shortOption.mark_iv / 100;
+
+    // Increase IV for target price calculation
+    const increasedSigmaLong = sigmaLong * (1 + ivIncrease / 100);
+    const increasedSigmaShort = sigmaShort * (1 + ivIncrease / 100);
+
+    // Calculate theoretical price at target using Black-Scholes
+    const longPutPriceAtTarget = blackScholesPut(targetPrice, longStrike, T / 2, r, increasedSigmaLong);
+    const shortPutPriceAtTarget = blackScholesPut(targetPrice, shortStrike, T / 2, r, increasedSigmaShort);
+    const theoreticalPriceAtTarget = (longPutPriceAtTarget * longQuantity) - (shortPutPriceAtTarget * shortQuantity);
+
+    // Calculate Greeks
+    const longDelta = calculateDelta(S, longStrike, T, r, sigmaLong, 'put');
+    const shortDelta = calculateDelta(S, shortStrike, T, r, sigmaShort, 'put');
+    const backspreadDelta = (longDelta * longQuantity) - (shortDelta * shortQuantity);
+
+    const longGamma = calculateGamma(S, longStrike, T, r, sigmaLong);
+    const shortGamma = calculateGamma(S, shortStrike, T, r, sigmaShort);
+    const backspreadGamma = (longGamma * longQuantity) - (shortGamma * shortQuantity);
+
+    const longVega = calculateVega(S, longStrike, T, r, sigmaLong);
+    const shortVega = calculateVega(S, shortStrike, T, r, sigmaShort);
+    const backspreadVega = (longVega * longQuantity) - (shortVega * shortQuantity);
+
+    const longTheta = calculateTheta(S, longStrike, T, r, sigmaLong, 'put');
+    const shortTheta = calculateTheta(S, shortStrike, T, r, sigmaShort, 'put');
+    const backspreadTheta = (longTheta * longQuantity) - (shortTheta * shortQuantity);
+
+    // Calculate hedge coverage return
+    const hedgeCoverageReturn = contracts * theoreticalPriceAtTarget;
+
+    // Calculate hedge efficiency metrics
+    const hedgeEfficiency = hedgeCoverageReturn / totalCost;
+    const hedgeEfficiencyPerDay = hedgeEfficiency / daysToExpiration;
+
+    const minimumDuration = 30;
+    const durationInDays = Math.min(daysToExpiration, minimumDuration);
+    const hedgeEfficiencyScore = (hedgeCoverageReturn / totalCost) * (durationInDays / minimumDuration);
+
+    // Calculate break-even price (approximate)
+    const breakEvenPrice = shortStrike - (netPremium / (longQuantity - shortQuantity));
+
+    return {
+      expiryDate: { display: longExpiryDate, raw: expiryTimestamp },
+      strike: { display: `${shortStrike}-${longStrike} (${shortQuantity}:${longQuantity})`, raw: [shortStrike, longStrike] },
+      markPrice: { display: netPremium.toFixed(4), raw: netPremium },
+      bidPrice: { display: shortOption.bid_price.toFixed(4), raw: shortOption.bid_price },
+      askPrice: { display: longOption.ask_price.toFixed(4), raw: longOption.ask_price },
+      optionPrice: { display: netPremium.toFixed(4), raw: netPremium },
+      contractCost: { display: `$${contractCost.toFixed(2)}`, raw: contractCost },
+      contracts: { display: contracts.toFixed(2), raw: contracts },
+      totalCost: { display: `$${totalCost.toFixed(2)}`, raw: totalCost },
+      theoreticalPrice: { display: `$${netPremium.toFixed(4)}`, raw: netPremium },
+      theoreticalPriceAtTarget: { display: `$${theoreticalPriceAtTarget.toFixed(4)}`, raw: theoreticalPriceAtTarget },
+      hedgeCoverageReturn: { display: `$${hedgeCoverageReturn.toFixed(2)}`, raw: hedgeCoverageReturn },
+      daysToExpiration: { display: daysToExpiration.toString(), raw: daysToExpiration },
+      impliedVolatility: { display: `${((sigmaLong + sigmaShort) / 2 * 100).toFixed(2)}%`, raw: (sigmaLong + sigmaShort) / 2 },
+      delta: { display: backspreadDelta.toFixed(4), raw: backspreadDelta },
+      gamma: { display: backspreadGamma.toFixed(6), raw: backspreadGamma },
+      vega: { display: backspreadVega.toFixed(4), raw: backspreadVega },
+      theta: { display: backspreadTheta.toFixed(4), raw: backspreadTheta },
+      hedgeEfficiency: { display: hedgeEfficiency.toFixed(2), raw: hedgeEfficiency },
+      hedgeEfficiencyPerDay: { display: hedgeEfficiencyPerDay.toFixed(4), raw: hedgeEfficiencyPerDay },
+      hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
+      breakEvenPrice: { display: `$${breakEvenPrice.toFixed(2)}`, raw: breakEvenPrice },
+      exchange: { display: longOption.exchange, raw: longOption.exchange },
+      longStrike: { display: `$${longStrike.toLocaleString()}`, raw: longStrike },
+      shortStrike: { display: `$${shortStrike.toLocaleString()}`, raw: shortStrike },
+      spreadWidth: { display: `$${(longStrike - shortStrike).toFixed(2)}`, raw: longStrike - shortStrike },
+    };
+  }, [investmentAmount, targetPrice, ivIncrease, ratioBackspreadRatio, calculateDelta, calculateGamma, calculateVega, calculateTheta]);
+
 
   const generateOptionsData = useMemo(() => (options: OptionData[]): CalculatedMetrics[] => {
     if (optionType === 'put') {
@@ -729,6 +964,35 @@ const OptionsDashboard: React.FC = () => {
         }
       });
       return butterflies;
+    } else if (optionType === 'ratioBackspread') {
+      const backspreads: CalculatedMetrics[] = [];
+      const optionsByExpiry = options.reduce((acc, option) => {
+        const [, expiryDate] = option.instrument_name.split('-');
+        if (!acc[expiryDate]) {
+          acc[expiryDate] = [];
+        }
+        acc[expiryDate].push(option);
+        return acc;
+      }, {});
+
+      Object.values(optionsByExpiry).forEach((sameExpiryOptions: OptionData[]) => {
+        for (let i = 0; i < sameExpiryOptions.length; i++) {
+          for (let j = i + 1; j < sameExpiryOptions.length; j++) {
+            const option1 = sameExpiryOptions[i];
+            const option2 = sameExpiryOptions[j];
+            const strike1 = parseFloat(option1.instrument_name.split('-')[2]);
+            const strike2 = parseFloat(option2.instrument_name.split('-')[2]);
+
+            if (strike1 < strike2) {
+              const backspreadMetrics = calculateRatioBackspreadMetrics(option2, option1); // Long (higher strike), Short (lower strike)
+              if (backspreadMetrics) {
+                backspreads.push(backspreadMetrics);
+              }
+            }
+          }
+        }
+      });
+      return backspreads;
     }
   }, [optionType, calculateMetrics, calculateSpreadMetrics]);
 
@@ -778,7 +1042,7 @@ const OptionsDashboard: React.FC = () => {
       <div className="text-2xl text-blue-600 dark:text-blue-400">Loading...</div>
     </div>
   );
-  
+
   if (error) return (
     <div className="flex items-center justify-center h-screen bg-gray-100 dark:bg-gray-900">
       <div className="text-2xl text-red-600 dark:text-red-400">Error: {error}</div>
@@ -876,6 +1140,7 @@ const OptionsDashboard: React.FC = () => {
                 <option value="put">Puts</option>
                 <option value="spread">Bear Put Spreads</option>
                 <option value="butterfly">Butterfly Put Spreads</option>
+                <option value="ratioBackspread">Put Ratio Backspread</option>
               </select>
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
@@ -905,6 +1170,19 @@ const OptionsDashboard: React.FC = () => {
                 className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
               />
             </div>
+            {optionType === 'ratioBackspread' && (
+              <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
+                <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Backspread Ratio</h3>
+                <input
+                  type="number"
+                  value={ratioBackspreadRatio}
+                  onChange={(e) => setRatioBackspreadRatio(Number(e.target.value))}
+                  min="2"
+                  step="1"
+                  className="w-full p-2 border rounded bg-gray-50 dark:bg-gray-700 text-gray-800 dark:text-white"
+                />
+              </div>
+            )}
           </div>
 
           <div className="mb-8 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
