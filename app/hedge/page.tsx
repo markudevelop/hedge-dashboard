@@ -188,8 +188,8 @@ const OptionsDashboard: React.FC = () => {
 
         setOptionsData(allOptions);
         if (allOptions.length > 0) {
-          setBtcPrice(allOptions[allOptions.length - 1].underlying_price);
-          setTargetPrice(allOptions[allOptions.length - 1].underlying_price * TARGET_PRICE);
+          setBtcPrice(bybitOptions[0].underlying_price);
+          setTargetPrice(bybitOptions[0].underlying_price * TARGET_PRICE);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unknown error occurred');
@@ -495,12 +495,12 @@ const OptionsDashboard: React.FC = () => {
     return Math.max(0, diffDays);
   }
 
-  const filterValidOptions = useMemo(() => (options: OptionData[]): OptionData[] => {
+  const filterValidOptions =(options: OptionData[]): OptionData[] => {
     return options.filter(o => {
       const isValid = o.ask_price && o.bid_price && getOptionDaysToExpiry(o) > 7;
       return isValid;
     });
-  }, []);
+  };
 
   const isValidPrice = (price: number): boolean => {
     return typeof price === 'number' && !isNaN(price) && price > 0;
@@ -1153,7 +1153,7 @@ const OptionsDashboard: React.FC = () => {
               />
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
-              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Target Price</h3>
+            <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Target Price ({TARGET_PRICE * 100}%)</h3>
               <input
                 type="number"
                 value={targetPrice}

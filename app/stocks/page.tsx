@@ -1,12 +1,15 @@
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowUpDown, Shield, DollarSign, TrendingUp, Menu, X, Moon, Sun } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import NavLink from '../components/NavLink';
 import Breadcrumbs from '../components/Breadcrumbs';
 import useDarkMode from '../hooks/useDarkMode';
+import { cumulativeNormalDistribution, blackScholesPut, blackScholesCall } from '../utils/options'
+
+const TARGET_PRICE = 0.7; // 30% OTM
 
 // Hardcoded API credentials
 const API_KEY = 'AKI6DSI3A1BXI3LSDA8A';
@@ -104,110 +107,17 @@ const columns: Column[] = [
   { key: 'hedgeEfficiencyScore', label: 'Hedge Efficiency Score' },
 ];
 
-const calculateMetrics = (
-  option: StockOptionData,
-  underlyingPrice: number,
-  investmentAmount: number,
-  targetPrice: number,
-  ivIncrease: number
-): CalculatedMetrics => {
-  const expiryDate = new Date(option.expiration_date);
-  const now = new Date();
-  const daysToExpiration = Math.max(0, Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
-
-  const T = daysToExpiration / 365;
-  const r = 0.01; // risk-free rate (assumed)
-  const S = underlyingPrice;
-  const K = option.strike_price;
-  const sigma = option.impliedVolatility;
-
-  const increasedSigma = sigma * (1 + ivIncrease / 100);
-
-  // Black-Scholes calculations
-  const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
-  const d2 = d1 - sigma * Math.sqrt(T);
-
-  const theoreticalPrice = option.option_type === 'put'
-    ? blackScholesPut(S, K, T, r, sigma)
-    : blackScholesCall(S, K, T, r, sigma);
-  const theoreticalPriceAtTargetValue = option.option_type === 'put'
-    ? blackScholesPut(targetPrice, K, T / 2, r, increasedSigma)
-    : blackScholesCall(targetPrice, K, T / 2, r, increasedSigma);
-
-  const optionPrice = (option.bid + option.ask) / 2;
-  const contractCost = optionPrice * 100; // Assuming each contract is for 100 shares
-  const contracts = Math.floor(investmentAmount / contractCost);
-  const totalCost = contracts * contractCost;
-
-  const hedgeCoverageReturn = contracts * theoreticalPriceAtTargetValue * 100;
-
-  const hedgeEfficiency = hedgeCoverageReturn / totalCost;
-  const hedgeEfficiencyPerDay = hedgeEfficiency / daysToExpiration;
-
-  const minimumDuration = 30;
-  const dailyCost = totalCost / daysToExpiration;
-  const durationInDays = Math.min(daysToExpiration, Math.floor(investmentAmount / dailyCost));
-  const hedgeEfficiencyScore = (hedgeCoverageReturn / totalCost) * (durationInDays / minimumDuration);
-
-  return {
-    expiryDate: { display: expiryDate.toISOString().split('T')[0], raw: expiryDate.getTime() },
-    strike: { display: `$${K.toFixed(2)}`, raw: K },
-    markPrice: { display: optionPrice.toFixed(2), raw: optionPrice },
-    bidPrice: { display: option.bid.toFixed(2), raw: option.bid },
-    askPrice: { display: option.ask.toFixed(2), raw: option.ask },
-    contractCost: { display: `$${contractCost.toFixed(2)}`, raw: contractCost },
-    contracts: { display: contracts.toString(), raw: contracts },
-    totalCost: { display: `$${totalCost.toFixed(2)}`, raw: totalCost },
-    daysToExpiration: { display: daysToExpiration.toString(), raw: daysToExpiration },
-    impliedVolatility: { display: `${(sigma * 100).toFixed(2)}%`, raw: sigma * 100 },
-    delta: { display: option.greeks.delta.toFixed(4), raw: option.greeks.delta },
-    gamma: { display: option.greeks.gamma.toFixed(6), raw: option.greeks.gamma },
-    vega: { display: option.greeks.vega.toFixed(4), raw: option.greeks.vega },
-    theta: { display: option.greeks.theta.toFixed(4), raw: option.greeks.theta },
-    theoreticalPrice: { display: `$${theoreticalPrice.toFixed(2)}`, raw: theoreticalPrice },
-    optionPrice: { display: optionPrice.toFixed(2), raw: optionPrice },
-    theoreticalPriceAtTarget: { display: `$${theoreticalPriceAtTargetValue.toFixed(2)}`, raw: theoreticalPriceAtTargetValue },
-    hedgeCoverageReturn: { display: `$${hedgeCoverageReturn.toFixed(2)}`, raw: hedgeCoverageReturn },
-    hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
-  };
-};
-
-const cumulativeNormalDistribution = (x: number): number => {
-  const a1 = 0.254829592;
-  const a2 = -0.284496736;
-  const a3 = 1.421413741;
-  const a4 = -1.453152027;
-  const a5 = 1.061405429;
-  const p = 0.3275911;
-  const sign = x < 0 ? -1 : 1;
-  const z = Math.abs(x) / Math.sqrt(2);
-  const t = 1 / (1 + p * z);
-  const erf = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-z * z));
-  return 0.5 * (1 + sign * erf);
-};
-
-const blackScholesPut = (S: number, K: number, T: number, r: number, sigma: number): number => {
-  const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
-  const d2 = d1 - sigma * Math.sqrt(T);
-  return K * Math.exp(-r * T) * cumulativeNormalDistribution(-d2) - S * cumulativeNormalDistribution(-d1);
-};
-
-const blackScholesCall = (S: number, K: number, T: number, r: number, sigma: number): number => {
-  const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
-  const d2 = d1 - sigma * Math.sqrt(T);
-  return S * cumulativeNormalDistribution(d1) - K * Math.exp(-r * T) * cumulativeNormalDistribution(d2);
-};
 
 const StockOptionsDashboard: React.FC = () => {
   const [optionsData, setOptionsData] = useState<StockOptionData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sortColumn, setSortColumn] = useState<keyof CalculatedMetrics>('hedgeEfficiencyScore');
+  const [sortColumn, setSortColumn] = useState<keyof CalculatedMetrics>('hedgeCoverageReturn');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [underlyingPrice, setUnderlyingPrice] = useState(0);
-  const [investmentAmount, setInvestmentAmount] = useState(10000);
+  const [investmentAmount, setInvestmentAmount] = useState(1000);
   const [targetPrice, setTargetPrice] = useState(0);
-  const [ivIncrease, setIvIncrease] = useState(0);
+  const [ivIncrease, setIvIncrease] = useState(150);
   const [ticker, setTicker] = useState('BITO');
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -234,10 +144,10 @@ const StockOptionsDashboard: React.FC = () => {
         const quoteData = await quoteResponse.json();
         const currentPrice = (quoteData.quote.ap + quoteData.quote.bp) / 2;
         setUnderlyingPrice(currentPrice);
-        setTargetPrice(currentPrice * 0.8);
+        setTargetPrice(currentPrice * TARGET_PRICE);
 
         // Fetch options data
-        const optionsResponse = await fetch(`https://data.alpaca.markets/v1beta1/options/snapshots/${ticker}?feed=indicative&limit=100`, {
+        const optionsResponse = await fetch(`https://data.alpaca.markets/v1beta1/options/snapshots/${ticker}?feed=indicative&limit=1000`, {
           headers: {
             'APCA-API-KEY-ID': API_KEY,
             'APCA-API-SECRET-KEY': API_SECRET,
@@ -265,6 +175,7 @@ const StockOptionsDashboard: React.FC = () => {
     setSortColumn(column);
     setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
   };
+
   const calculateMetrics = (
     optionKey: string,
     option: StockOptionData,
@@ -273,20 +184,16 @@ const StockOptionsDashboard: React.FC = () => {
     targetPrice: number,
     ivIncrease: number
   ): CalculatedMetrics => {
-    const symbol = optionKey.slice(0, 4); // Extracting the symbol
-    const expiryDatePart = optionKey.slice(4, 10); // Extracting the expiry date part
-    const expiryYear = `20${expiryDatePart.slice(0, 2)}`;
-    const expiryMonth = expiryDatePart.slice(2, 4);
-    const expiryDay = expiryDatePart.slice(4, 6);
-    const expiryDate = `${expiryYear}-${expiryMonth}-${expiryDay}`;
+    const symbol = optionKey.slice(0, 4); // e.g., "BITO"
+    const year = parseInt(optionKey.slice(4, 6)) + 2000; // e.g., "24" -> 2024
+    const month = parseInt(optionKey.slice(6, 8)); // e.g., "08"
+    const day = parseInt(optionKey.slice(8, 10)); // e.g., "23"
+    const optionType = optionKey.charAt(10) === 'C' ? 'C' : 'P';
+    const strike = parseFloat(optionKey.slice(11)) / 1000; // e.g., "00019500" -> 19.5
 
-    const strikeAndType = optionKey.slice(10); // Extracting the strike and option type part
-    const optionType = strikeAndType.slice(0, 1); // Extracting the option type
-    const strike = parseFloat(strikeAndType.slice(1)); // Extracting the strike price
-
+    const expiryDate = new Date(year, month - 1, day); // month is 0-indexed in JS Date
     const now = new Date();
-    const expiry = new Date(`${expiryYear}-${expiryMonth}-${expiryDay}`);
-    const daysToExpiration = Math.max(0, Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    const daysToExpiration = Math.max(0, Math.ceil((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
 
     const T = daysToExpiration / 365;
     const r = 0.01; // Risk-free rate (assumed)
@@ -332,11 +239,14 @@ const StockOptionsDashboard: React.FC = () => {
       : (-S * sigma * Math.exp(-Math.pow(d1(S, K, T, r, sigma), 2) / 2) / (2 * Math.sqrt(T)) + r * K * Math.exp(-r * T) * cumulativeNormalDistribution(d2(S, K, T, r, sigma))) / 365;
 
     return {
-      expiryDate: { display: `${expiryMonth} ${expiryDay} ${expiryYear}`, raw: expiry.getTime() },
+      expiryDate: {
+        display: `${expiryDate.toLocaleString('default', { month: 'short' })} ${expiryDate.getDate()} ${expiryDate.getFullYear()}`,
+        raw: expiryDate.getTime()
+      },
       strike: { display: `$${K.toFixed(2)}`, raw: K },
-      markPrice: { display: optionPrice.toFixed(2), raw: optionPrice },
-      bidPrice: { display: option.latestQuote.bp.toFixed(2), raw: option.latestQuote.bp },
-      askPrice: { display: option.latestQuote.ap.toFixed(2), raw: option.latestQuote.ap },
+      markPrice: { display: optionPrice.toFixed(3), raw: optionPrice },
+      bidPrice: { display: option.latestQuote.bp.toFixed(3), raw: option.latestQuote.bp },
+      askPrice: { display: option.latestQuote.ap.toFixed(3), raw: option.latestQuote.ap },
       contractCost: { display: `$${contractCost.toFixed(2)}`, raw: contractCost },
       contracts: { display: contracts.toString(), raw: contracts },
       totalCost: { display: `$${totalCost.toFixed(2)}`, raw: totalCost },
@@ -361,35 +271,9 @@ const StockOptionsDashboard: React.FC = () => {
   const d2 = (S: number, K: number, T: number, r: number, sigma: number): number =>
     d1(S, K, T, r, sigma) - sigma * Math.sqrt(T);
 
-  const cumulativeNormalDistribution = (x: number): number => {
-    const a1 = 0.254829592;
-    const a2 = -0.284496736;
-    const a3 = 1.421413741;
-    const a4 = -1.453152027;
-    const a5 = 1.061405429;
-    const p = 0.3275911;
-    const sign = x < 0 ? -1 : 1;
-    const z = Math.abs(x) / Math.sqrt(2);
-    const t = 1 / (1 + p * z);
-    const erf = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-z * z));
-    return 0.5 * (1 + sign * erf);
-  };
-
-  const blackScholesPut = (S: number, K: number, T: number, r: number, sigma: number): number => {
-    const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
-    const d2 = d1 - sigma * Math.sqrt(T);
-    return K * Math.exp(-r * T) * cumulativeNormalDistribution(-d2) - S * cumulativeNormalDistribution(-d1);
-  };
-
-  const blackScholesCall = (S: number, K: number, T: number, r: number, sigma: number): number => {
-    const d1 = (Math.log(S / K) + (r + Math.pow(sigma, 2) / 2) * T) / (sigma * Math.sqrt(T));
-    const d2 = d1 - sigma * Math.sqrt(T);
-    return S * cumulativeNormalDistribution(d1) - K * Math.exp(-r * T) * cumulativeNormalDistribution(d2);
-  };
-
   // In your component:
   const sortedData = Object.entries(optionsData)
-    // .filter(([key]) => key.endsWith('P')) // Filter for put options
+    .filter(([key, option]) => key.includes('P') && Math.max(0, Math.ceil((new Date(parseInt(key.slice(4, 6)) + 2000, parseInt(key.slice(6, 8)) - 1, parseInt(key.slice(8, 10))).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) > 7) // Filter for put options
     .map(([key, option]) => calculateMetrics(key, option, underlyingPrice, investmentAmount, targetPrice, ivIncrease))
     .sort((a, b) => {
       const aValue = a[sortColumn].raw;
@@ -516,7 +400,7 @@ const StockOptionsDashboard: React.FC = () => {
               />
             </div>
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md">
-              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Target Price</h3>
+              <h3 className="font-bold mb-2 text-gray-700 dark:text-gray-300">Target Price ({TARGET_PRICE * 100}%)</h3>
               <input
                 type="number"
                 value={targetPrice}
