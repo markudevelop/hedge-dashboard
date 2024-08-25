@@ -1215,7 +1215,7 @@ const OptionsDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedData.slice(0, 40).map((option, index) => (
+                {sortedData.slice(0, 200).map((option, index) => (
                   <tr key={index} className={index % 2 === 0 ? 'bg-gray-50 dark:bg-gray-800' : 'bg-white dark:bg-gray-700'}>
                     <td className="px-4 py-2 text-gray-800 dark:text-gray-200">{option.exchange.display}</td>
                     {columns.map(({ key }) => (

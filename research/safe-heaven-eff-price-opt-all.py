@@ -33,7 +33,7 @@ def calcEfficientPrice(K: float, target_price: float, eff: float):
 
 # Example target price calculation and efficiency factor
 current_price = ticker.info['regularMarketOpen']
-target_price = ticker.info['regularMarketOpen'] * 0.80
+target_price = ticker.info['regularMarketOpen'] * 0.70
 eff = 5.4
 
 # Apply the efficient price calculation to all options
