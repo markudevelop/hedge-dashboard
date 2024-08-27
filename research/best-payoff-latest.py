@@ -30,7 +30,7 @@ def fetch_deribit_data(currency="BTC"):
                 and float(option['instrument_name'].split('-')[-2]) <  option['underlying_price']
                 # and option['bid_price'] != None and option['bid_price'] > 0
                 and option['ask_price'] != None and option['ask_price'] > 0
-                and (datetime.strptime(option['instrument_name'].split('-')[1], "%d%b%y") - datetime.now()).days >= 30
+                and (datetime.strptime(option['instrument_name'].split('-')[1], "%d%b%y") - datetime.now()).days >= 40
             ]
             return put_options
         else:
@@ -56,7 +56,7 @@ for option in options:
 # Fixed variables
 riskFreeRate = 0.05
 timeToMaturity = 36 / 365
-budget = 1000  # $4,000 budget
+budget = 4000  # $4,000 budget
 
 # Black-Scholes function for put option pricing
 def calculate_put_price(S, K, T, r, sigma):
@@ -102,6 +102,7 @@ for i, drop in enumerate(price_drops):
                 best_strike = option['strike']
                 best_strike_details = option
                 best_strike_details['num_contracts'] = num_contracts
+                best_strike_details['new_price'] = new_price
                 # Store details of this scenario
                 details = {
                     'drop': drop,
@@ -113,7 +114,8 @@ for i, drop in enumerate(price_drops):
                     'num_contracts': num_contracts,
                     'total_payoff': num_contracts * new_option_price,
                     'amount_spent': num_contracts * option['marketPrice'],
-                    'payoff': payoff
+                    'payoff': payoff,
+                    'new_price': new_price,
                 }
         
         payoff_matrix[i, j] = best_payoff
@@ -127,7 +129,8 @@ for i, drop in enumerate(price_drops):
             'iv_increase': iv_increase,
             'payoff': best_payoff,
             'instrument_name': best_strike_details['instrument_name'],
-            'num_contracts': best_strike_details['num_contracts']
+            'num_contracts': best_strike_details['num_contracts'],
+            'new_price': best_strike_details['new_price']
         })
 
         # Check if this is the best overall result
@@ -148,6 +151,7 @@ if best_overall_details:
     print(f"  Total Amount Spent: ${best_overall_details['amount_spent']:.2f}")
     print(f"  Expected Total Payoff: ${best_overall_details['total_payoff']:.2f}")
     print(f"  Expected Payoff: x{best_overall_details['payoff']:.2f}")
+    print(f"  New BTC price: {best_overall_details['new_price']:.2f}")
 
 # Console log all the best strike prices with their conditions
 for strike, details in best_strikes.items():
