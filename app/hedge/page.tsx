@@ -497,7 +497,7 @@ const OptionsDashboard: React.FC = () => {
 
   const filterValidOptions =(options: OptionData[]): OptionData[] => {
     return options.filter(o => {
-      const isValid = o.ask_price && o.bid_price && getOptionDaysToExpiry(o) > 7;
+      const isValid = o.ask_price && o.bid_price && getOptionDaysToExpiry(o) > 40;
       return isValid;
     });
   };
