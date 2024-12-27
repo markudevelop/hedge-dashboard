@@ -4,9 +4,130 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowUpDown, Menu, X, Moon, Sun } from 'lucide-react';
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
+import { create, all } from 'mathjs';
+const math = create(all);
+
 import NavLink from '../components/NavLink';
 import Breadcrumbs from '../components/Breadcrumbs';
 import useDarkMode from '../hooks/useDarkMode';
+
+const hestonOptionPrice = (
+  S, K, T, r, q, params, optionType = 'put'
+) => {
+  const { v0, theta, kappa, sigma, rho } = params;
+  const lambda = 0; // Risk parameter, often set to 0
+
+  const P1 = hestonProbability(
+    S, K, T, r, q, v0, theta, kappa, sigma, rho, lambda, 1
+  );
+  const P2 = hestonProbability(
+    S, K, T, r, q, v0, theta, kappa, sigma, rho, lambda, 2
+  );
+
+  if (optionType === 'call') {
+    return S * Math.exp(-q * T) * P1 - K * Math.exp(-r * T) * P2;
+  } else {
+    return K * Math.exp(-r * T) * (1 - P2) - S * Math.exp(-q * T) * (1 - P1);
+  }
+};
+
+
+const hestonProbability = (
+  S, K, T, r, q, v0, theta, kappa, sigma, rho, lambda, Pnum
+) => {
+  const i = math.complex(0, 1);
+  const integrand = (phi) => {
+    const numerator = math.multiply(
+      math.exp(math.multiply(-i * phi, math.log(K))),
+      hestonCharacteristicFunction(
+        phi, S, T, r, q, v0, theta, kappa, sigma, rho, lambda, Pnum
+      )
+    );
+    const denominator = math.multiply(i, phi);
+    const value = math.divide(numerator, denominator);
+    return value.re; // Take the real part
+  };
+
+  // Numerical integration from 0 to infinity (we'll use an upper limit)
+  const upperLimit = 100;
+  const N = 1000; // Number of intervals
+  const delta = upperLimit / N;
+
+  let sum = 0;
+  for (let j = 1; j <= N; j++) {
+    const phi = delta * (j - 0.5);
+    sum += integrand(phi) * delta;
+  }
+
+  return 0.5 + (1 / Math.PI) * sum;
+};
+
+
+const hestonCharacteristicFunction = (
+  phi, S, T, r, q, v0, theta, kappa, sigma, rho, lambda, Pnum
+) => {
+  const i = math.complex(0, 1);
+  const u = Pnum === 1 ? 0.5 : -0.5;
+  const b = kappa - lambda + rho * sigma;
+  const a = kappa * theta;
+  const x = math.log(S);
+  
+  const d = math.sqrt(
+    math.add(
+      math.pow(math.subtract(b, math.multiply(rho * sigma, i * phi)), 2),
+      math.multiply(
+        sigma ** 2,
+        math.add(
+          math.multiply(i * phi, i * phi),
+          -math.multiply(2 * u, i * phi)
+        )
+      )
+    )
+  );
+
+  const g = math.divide(
+    math.subtract(b - math.multiply(rho * sigma, i * phi), d),
+    math.add(b - math.multiply(rho * sigma, i * phi), d)
+  );
+
+  const exponent1 = math.multiply(
+    math.subtract(b - math.multiply(rho * sigma, i * phi), d),
+    T
+  );
+  const exponent2 = math.multiply(d, T);
+
+  const C = math.multiply(
+    r * i * phi * T,
+    math.add(
+      math.divide(a, sigma ** 2),
+      math.subtract(
+        math.subtract(math.log(math.divide(math.subtract(1, math.multiply(g, math.exp(-exponent2))), math.subtract(1, g))), 0),
+        math.multiply(exponent1, math.divide(1, sigma ** 2))
+      )
+    )
+  );
+
+  const D = math.multiply(
+    math.divide(
+      math.subtract(b - math.multiply(rho * sigma, i * phi), d),
+      sigma ** 2
+    ),
+    math.divide(
+      math.subtract(1, math.exp(-exponent2)),
+      math.subtract(1, math.multiply(g, math.exp(-exponent2)))
+    )
+  );
+
+  const characteristic = math.exp(
+    math.add(
+      math.add(C, math.multiply(D, v0)),
+      math.multiply(i * phi, x)
+    )
+  );
+
+  return characteristic;
+};
+
 
 type OptionData = {
   instrument_name: string;
@@ -60,6 +181,11 @@ type CalculatedMetrics = {
   breakEvenPrice?: MetricValue;
   lowerBreakEven?: MetricValue;
   upperBreakEven?: MetricValue;
+  // Most vega for buck
+  vegaEfficiency: MetricValue;
+  // Heston model
+  hestonPrice: MetricValue;
+  hestonPriceAtTarget: MetricValue;
 };
 
 type Column = {
@@ -95,6 +221,7 @@ const columns: Column[] = [
   { key: 'hedgeEfficiency', label: 'Hedge Efficiency' },
   { key: 'hedgeEfficiencyPerDay', label: 'Hedge Efficiency Per Day' },
   { key: 'hedgeEfficiencyScore', label: 'Hedge Efficiency Score' },
+  { key: 'vegaEfficiency', label: 'Vega Efficiency' },
   // Spreads
   { key: 'longStrike', label: 'Long Strike' },
   { key: 'shortStrike', label: 'Short Strike' },
@@ -105,6 +232,9 @@ const columns: Column[] = [
   // Butterflies
   { key: 'lowerBreakEven', label: 'Lower Break Even' },
   { key: 'upperBreakEven', label: 'Upper Break Even' },
+  // Heston
+  { key: 'hestonPrice', label: 'Heston Model Price' },
+  { key: 'hestonPriceAtTarget', label: 'Heston Price at Target' },
 ];
 
 const OptionsDashboard: React.FC = () => {
@@ -259,11 +389,29 @@ const OptionsDashboard: React.FC = () => {
     const dailyCost = totalCost / daysToExpiration;
     const durationInDays = Math.min(daysToExpiration, Math.floor(investmentAmount / dailyCost));
     const hedgeEfficiencyScore = (hedgeCoverageReturn / totalCost) * (durationInDays / minimumDuration);
+    const totalVega = vega * contracts;
+    const vegaEfficiency = totalVega / totalCost; 
 
+
+    // Heston model parameters
+    const hestonParams = {
+      v0: sigma ** 2,      // Initial variance (sigma squared)
+      theta: sigma ** 2,   // Long-term variance
+      kappa: 2.0,          // Rate of mean reversion
+      sigma: 0.2,          // Volatility of volatility
+      rho: -0.7            // Correlation between asset price and volatility
+    };
+    const hestonPrice = hestonOptionPrice(
+      S, K, T, r, 0, hestonParams, 'put'
+    );
+    const hestonPriceAtTarget = hestonOptionPrice(
+      targetPrice, K, T / 2, r, 0, hestonParams, 'put'
+    );
     return {
       // option: {
       //   ...option,
       // },
+      vegaEfficiency: { display: vegaEfficiency.toFixed(4), raw: vegaEfficiency },
       expiryDate: { display: expiryDate, raw: expiryTimestamp },
       strike: { display: `$${strike.toLocaleString()}`, raw: strike },
       optionPrice: { display: optionPrice.toFixed(4), raw: optionPrice },
@@ -286,6 +434,8 @@ const OptionsDashboard: React.FC = () => {
       hedgeEfficiencyPerDay: { display: hedgeEfficiencyPerDay.toFixed(4), raw: hedgeEfficiencyPerDay },
       exchange: { display: option.exchange, raw: option.exchange },
       hedgeEfficiencyScore: { display: hedgeEfficiencyScore.toFixed(4), raw: hedgeEfficiencyScore },
+      hestonPrice: { display: `$${hestonPrice.toFixed(4)}`, raw: hestonPrice },
+      hestonPriceAtTarget: { display: `$${hestonPriceAtTarget.toFixed(4)}`, raw: hestonPriceAtTarget },
     };
   }, [investmentAmount, targetPrice, ivIncrease]);
 

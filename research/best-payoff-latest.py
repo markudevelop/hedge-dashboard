@@ -66,7 +66,7 @@ def calculate_put_price(S, K, T, r, sigma):
     return put_price
 
 # Define price drops and IV increases
-price_drops = [-0.10, -0.20, -0.30, -0.4]
+price_drops = [-0.10, -0.20, -0.30]
 iv_increases = [0.00, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.8, 1]
 
 # Initialize payoff matrix and strike matrix
