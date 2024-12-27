@@ -395,7 +395,7 @@ const PremiumSellingDashboard: React.FC = () => {
 
     return calculatedData
       .filter((option) => (option.probabilityOTM.raw as number) >= minProbabilityOTM)
-      .sort((a, b) => {
+      .sort((a: any, b: any) => {
         const aValue = a[sortColumn].raw;
         const bValue = b[sortColumn].raw;
 
@@ -900,7 +900,7 @@ const PremiumSellingDashboard: React.FC = () => {
                     </td>
                     {columns.map(({ key }) => (
                       <td key={key} className="px-4 py-2 text-gray-800 dark:text-gray-200">
-                        {option[key]?.display}
+                        {option[key as any]?.display}
                       </td>
                     ))}
                   </tr>
