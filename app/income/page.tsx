@@ -8,6 +8,52 @@ import NavLink from '../components/NavLink';
 import Breadcrumbs from '../components/Breadcrumbs';
 import useDarkMode from '../hooks/useDarkMode';
 
+import { initializeApp } from "firebase/app";
+import { getFirestore, doc, setDoc, getDoc, collection, getDocs } from "firebase/firestore";
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyBU8KGPXDoIPx1e8vsFSHCpV37-kzzPj_E",
+  authDomain: "crypto-hedge-e7772.firebaseapp.com",
+  projectId: "crypto-hedge-e7772",
+  storageBucket: "crypto-hedge-e7772.firebasestorage.app",
+  messagingSenderId: "111450491925",
+  appId: "1:111450491925:web:6e5c2fcf9c2727b52cd21c"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const savePositionsToFirebase = async (myPositions) => {
+  try {
+    const userDocRef = doc(db, "user_positions", "user_unique_id");
+    await setDoc(userDocRef, { positions: myPositions });
+  } catch (error) {
+    console.error("Error saving positions:", error);
+  }
+};
+
+// Get myPositions from Firestore
+const getPositionsFromFirebase = async () => {
+  try {
+    const userDocRef = doc(db, "user_positions", "user_unique_id");
+    const docSnap = await getDoc(userDocRef);
+
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      return data.positions;
+    } else {
+      console.log("No positions found for this user.");
+      return [];
+    }
+  } catch (error) {
+    console.error("Error fetching positions:", error);
+    return [];
+  }
+};
+
+
 // ------------------ Types ------------------
 type OptionData = {
   instrument_name: string;
@@ -103,15 +149,26 @@ const PremiumSellingDashboard: React.FC = () => {
   const [newQuantity, setNewQuantity] = useState<number>(1);
 
   // Load from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedPositions = localStorage.getItem('myPositions');
-      if (storedPositions) {
-        setMyPositions(JSON.parse(storedPositions));
-      }
+  // useEffect(() => {
+  //   if (typeof window !== 'undefined') {
+  //     const storedPositions = localStorage.getItem('myPositions');
+  //     if (storedPositions) {
+  //       setMyPositions(JSON.parse(storedPositions));
+  //     }
 
+  //     setPositionsLoaded(true);
+  //   }
+  // }, []);
+
+  useEffect(() => {
+    // Load positions from Firebase on mount
+    const loadPositions = async () => {
+      const positions = await getPositionsFromFirebase();
+      setMyPositions(positions);
       setPositionsLoaded(true);
-    }
+    };
+  
+    loadPositions();
   }, []);
 
   // Only write to localStorage if we have some positions
@@ -120,9 +177,11 @@ const PremiumSellingDashboard: React.FC = () => {
 
     if (myPositions.length === 0) {
       // Remove from localStorage only if the user truly has no positions
-      localStorage.removeItem('myPositions');
+      // localStorage.removeItem('myPositions');
+      savePositionsToFirebase(myPositions);
     } else {
-      localStorage.setItem('myPositions', JSON.stringify(myPositions));
+      // localStorage.setItem('myPositions', JSON.stringify(myPositions));
+      savePositionsToFirebase(myPositions);
     }
   }, [myPositions, positionsLoaded]);
   // ------------------------------------------------------
@@ -886,7 +945,9 @@ const PremiumSellingDashboard: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {sortedData.slice(0, 40).map((option, index) => (
+                {sortedData.filter((option: any) => (
+                    option.rawOption.instrument_name.includes(optionType === 'call' ? '-C' : '-P')
+                )).slice(0, 40).map((option, index) => (
                   <tr
                     key={index}
                     className={
