@@ -167,7 +167,7 @@ const PremiumSellingDashboard: React.FC = () => {
       setMyPositions(positions);
       setPositionsLoaded(true);
     };
-  
+
     loadPositions();
   }, []);
 
@@ -540,6 +540,55 @@ const PremiumSellingDashboard: React.FC = () => {
     return (getOpenPnlBtc(pos) / costBtc) * 100;
   };
 
+  // Add these somewhere after your getOpenPnlBtc, getOpenPnlUsd, etc. functions:
+
+  // Total Premium (BTC)
+  const totalPremiumBtc = useMemo(() => {
+    return myPositions.reduce((acc, pos) => acc + pos.fillPrice * pos.quantity, 0);
+  }, [myPositions]);
+
+  // Total Premium (USD)
+  const totalPremiumUsd = useMemo(() => {
+    return totalPremiumBtc * underlyingPrice;
+  }, [totalPremiumBtc, underlyingPrice]);
+
+  // Total PnL (BTC)
+  const totalPnLBtc = useMemo(() => {
+    return myPositions.reduce((acc, pos) => acc + getOpenPnlBtc(pos), 0);
+  }, [myPositions, allCalculatedData]);
+
+  // Total PnL (USD)
+  const totalPnLUsd = useMemo(() => {
+    return myPositions.reduce((acc, pos) => acc + getOpenPnlUsd(pos), 0);
+  }, [myPositions, allCalculatedData]);
+
+  // Overall % PnL = ( totalPnLBtc / total cost basis ) * 100
+  const totalCostBtc = useMemo(() => {
+    return myPositions.reduce((acc, pos) => acc + pos.fillPrice * pos.quantity, 0);
+  }, [myPositions]);
+
+  const totalPnLPercent = totalCostBtc > 0 ? (totalPnLBtc / totalCostBtc) * 100 : 0;
+
+  // Total Realized Premium (BTC)
+  const totalRealizedPremiumBtc = useMemo(() => {
+    return myPositions.reduce((acc, pos) => {
+      const match = allCalculatedData.find(
+        (opt) => opt.rawOption.instrument_name === pos.instrumentName
+      );
+      if (!match) return acc;
+      const currentMarkPrice = match.markPrice.raw as number;
+
+      // Calculate realized premium: (currentMarkPrice - fillPrice) * quantity
+      return acc + (currentMarkPrice - pos.fillPrice) * pos.quantity;
+    }, 0);
+  }, [myPositions, allCalculatedData]);
+
+  // Total Realized Premium (USD)
+  const totalRealizedPremiumUsd = useMemo(() => {
+    return totalRealizedPremiumBtc * underlyingPrice;
+  }, [totalRealizedPremiumBtc, underlyingPrice]);
+
+
   // -------------- Render --------------
   if (loading)
     return (
@@ -554,6 +603,7 @@ const PremiumSellingDashboard: React.FC = () => {
         <div className="text-2xl text-red-600 dark:text-red-400">Error: {error}</div>
       </div>
     );
+
 
   return (
     <div className={`flex flex-col min-h-screen ${isDarkMode ? 'dark' : ''}`}>
@@ -810,6 +860,9 @@ const PremiumSellingDashboard: React.FC = () => {
                         Quantity
                       </th>
                       <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">
+                        Days Left
+                      </th>
+                      <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">
                         Current Mark (BTC)
                       </th>
                       <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">
@@ -851,6 +904,8 @@ const PremiumSellingDashboard: React.FC = () => {
                         return totalPremiumBtc * underlyingPrice;
                       };
 
+                      const daysLeft = match?.daysToExpiration.raw ?? 0; //  <-- GET DAYS
+
                       return (
                         <tr
                           key={idx}
@@ -871,6 +926,9 @@ const PremiumSellingDashboard: React.FC = () => {
                           </td>
                           <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
                             {pos.quantity}
+                          </td>
+                          <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
+                            {Number(daysLeft).toFixed(1)}  {/* or just daysLeft */}
                           </td>
                           <td className="px-4 py-2 text-gray-800 dark:text-gray-200">
                             {Number(currentMark).toFixed(4)}
@@ -919,6 +977,50 @@ const PremiumSellingDashboard: React.FC = () => {
                       );
                     })}
                   </tbody>
+                  {/* Totals Row */}
+                  <tfoot>
+                    <tr className="bg-gray-200 dark:bg-gray-600 font-semibold">
+                      <td className="px-4 py-2">Totals</td>
+                      <td className="px-4 py-2">--</td>
+                      <td className="px-4 py-2">--</td>
+                      <td className="px-4 py-2">--</td>
+                      <td className="px-4 py-2">--</td>
+
+                      {/* Total Premium Collected (BTC/USD) */}
+                      <td className="px-4 py-2">
+                        {totalPremiumBtc.toFixed(4)} / {totalPremiumUsd.toFixed(2)}
+                      </td>
+
+                      {/* Total Realized Premium (BTC/USD) */}
+                      <td className="px-4 py-2">
+                        {totalRealizedPremiumBtc.toFixed(4)} / {totalRealizedPremiumUsd.toFixed(2)}
+                      </td>
+
+                      {/* Total PnL (BTC) */}
+                      <td
+                        className={`px-4 py-2 ${totalPnLBtc >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
+                      >
+                        {totalPnLBtc.toFixed(4)}
+                      </td>
+
+                      {/* Total PnL (USD) */}
+                      <td
+                        className={`px-4 py-2 ${totalPnLUsd >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
+                      >
+                        {totalPnLUsd.toFixed(2)}
+                      </td>
+
+                      {/* Total PnL (%) */}
+                      <td
+                        className={`px-4 py-2 ${totalPnLPercent >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}
+                      >
+                        {totalPnLPercent.toFixed(2)}%
+                      </td>
+
+                      <td className="px-4 py-2">--</td> {/* No action on totals row */}
+                    </tr>
+                  </tfoot>
+
                 </table>
               </div>
             ) : (
@@ -946,7 +1048,7 @@ const PremiumSellingDashboard: React.FC = () => {
               </thead>
               <tbody>
                 {sortedData.filter((option: any) => (
-                    option.rawOption.instrument_name.includes(optionType === 'call' ? '-C' : '-P')
+                  option.rawOption.instrument_name.includes(optionType === 'call' ? '-C' : '-P')
                 )).slice(0, 40).map((option, index) => (
                   <tr
                     key={index}
