@@ -350,9 +350,9 @@ const OptionsDashboard: React.FC = () => {
   );
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [btcPrice, setBtcPrice] = useState(0);
-  const [investmentAmount, setInvestmentAmount] = useState(1000);
+  const [investmentAmount, setInvestmentAmount] = useState(10000);
   const [targetPrice, setTargetPrice] = useState(0);
-  const [ivIncrease, setIvIncrease] = useState(150);
+  const [ivIncrease, setIvIncrease] = useState(100);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [ratioBackspreadRatio, setRatioBackspreadRatio] = useState(2);
 

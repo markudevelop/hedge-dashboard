@@ -115,10 +115,10 @@ const StockOptionsDashboard: React.FC = () => {
   const [sortColumn, setSortColumn] = useState<keyof CalculatedMetrics>('hedgeCoverageReturn');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [underlyingPrice, setUnderlyingPrice] = useState(0);
-  const [investmentAmount, setInvestmentAmount] = useState(1000);
+  const [investmentAmount, setInvestmentAmount] = useState(10000);
   const [targetPrice, setTargetPrice] = useState(0);
-  const [ivIncrease, setIvIncrease] = useState(150);
-  const [ticker, setTicker] = useState('BITO');
+  const [ivIncrease, setIvIncrease] = useState(100);
+  const [ticker, setTicker] = useState('IBIT');
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const { isDarkMode, toggleDarkMode } = useDarkMode();

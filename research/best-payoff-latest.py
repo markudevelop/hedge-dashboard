@@ -56,7 +56,7 @@ for option in options:
 # Fixed variables
 riskFreeRate = 0.05
 timeToMaturity = 36 / 365
-budget = 4000  # $4,000 budget
+budget = 10000  # $4,000 budget
 
 # Black-Scholes function for put option pricing
 def calculate_put_price(S, K, T, r, sigma):
